@@ -11,10 +11,9 @@ import (
 )
 
 var (
-	authorityAdminsTable                  = []byte("authority_admins")
-	authorityConfigsTable                 = []byte("authority_configs")
-	authorityProvisionersTable            = []byte("authority_provisioners")
-	authorityProvisionersNameIDIndexTable = []byte("authority_provisioners_name_id_index")
+	authorityAdminsTable       = []byte("authority_admins")
+	authorityConfigsTable      = []byte("authority_configs")
+	authorityProvisionersTable = []byte("authority_provisioners")
 )
 
 // DB is a struct that implements the AcmeDB interface.

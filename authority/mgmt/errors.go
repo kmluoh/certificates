@@ -199,7 +199,6 @@ func WriteError(w http.ResponseWriter, err *Error) {
 		}
 	}
 
-	fmt.Printf("err = %+v\n", err)
 	if err := json.NewEncoder(w).Encode(err); err != nil {
 		log.Println(err)
 	}

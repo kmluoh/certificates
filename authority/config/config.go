@@ -1,5 +1,6 @@
 package config
 
+<<<<<<< HEAD
 import (
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,14 @@ import (
 	"github.com/smallstep/certificates/templates"
 )
 
+=======
+import "github.com/smallstep/certificates/authority/config"
+
+// Config is an alias to support older APIs.
+type Config = config.Config
+
+<<<<<<<< HEAD:authority/config/config.go
+>>>>>>> 444ae6d (first commit)
 const (
 	legacyAuthority = "step-certificate-authority"
 )
@@ -33,6 +42,7 @@ var (
 		MaxVersion:    1.2,
 		Renegotiation: false,
 	}
+<<<<<<< HEAD
 	// DefaultBackdate length of time to backdate certificates to avoid
 	// clock skew validation issues.
 	DefaultBackdate = time.Minute
@@ -41,19 +51,29 @@ var (
 	// DefaultEnableSSHCA enable SSH CA features per provisioner or globally
 	// for all provisioners.
 	DefaultEnableSSHCA = false
+=======
+	defaultBackdate       = time.Minute
+	defaultDisableRenewal = false
+	defaultEnableSSHCA    = false
+>>>>>>> 444ae6d (first commit)
 	// GlobalProvisionerClaims default claims for the Authority. Can be overriden
 	// by provisioner specific claims.
 	GlobalProvisionerClaims = provisioner.Claims{
 		MinTLSDur:         &provisioner.Duration{Duration: 5 * time.Minute}, // TLS certs
 		MaxTLSDur:         &provisioner.Duration{Duration: 24 * time.Hour},
 		DefaultTLSDur:     &provisioner.Duration{Duration: 24 * time.Hour},
+<<<<<<< HEAD
 		DisableRenewal:    &DefaultDisableRenewal,
+=======
+		DisableRenewal:    &defaultDisableRenewal,
+>>>>>>> 444ae6d (first commit)
 		MinUserSSHDur:     &provisioner.Duration{Duration: 5 * time.Minute}, // User SSH certs
 		MaxUserSSHDur:     &provisioner.Duration{Duration: 24 * time.Hour},
 		DefaultUserSSHDur: &provisioner.Duration{Duration: 16 * time.Hour},
 		MinHostSSHDur:     &provisioner.Duration{Duration: 5 * time.Minute}, // Host SSH certs
 		MaxHostSSHDur:     &provisioner.Duration{Duration: 30 * 24 * time.Hour},
 		DefaultHostSSHDur: &provisioner.Duration{Duration: 30 * 24 * time.Hour},
+<<<<<<< HEAD
 		EnableSSHCA:       &DefaultEnableSSHCA,
 	}
 )
@@ -146,6 +166,42 @@ func (c *AuthConfig) Validate(audiences provisioner.Audiences) error {
 	return nil
 }
 
+=======
+		EnableSSHCA:       &defaultEnableSSHCA,
+	}
+)
+========
+// AuthConfig is an alias to support older APIs.
+type AuthConfig = config.AuthConfig
+>>>>>>>> 444ae6d (first commit):authority/config.go
+
+// ASN1DN is an alias to support older APIs.
+type ASN1DN = config.ASN1DN
+
+// TLS
+
+// TLSOptions is an alias to support older APIs.
+type TLSOptions = config.TLSOptions
+
+// SSH
+
+// SSHConfig is an alias to support older APIs.
+type SSHConfig = config.SSHConfig
+
+// Bastion is an alias to support older APIs.
+type Bastion = config.Bastion
+
+// HostTag is an alias to support older APIs.
+type HostTag = config.HostTag
+
+// Host is an alias to support older APIs.
+type Host = config.Host
+
+// SSHPublicKey is an alias to support older APIs.
+type SSHPublicKey = config.SSHPublicKey
+
+<<<<<<<< HEAD:authority/config/config.go
+>>>>>>> 444ae6d (first commit)
 // LoadConfiguration parses the given filename in JSON format and returns the
 // configuration struct.
 func LoadConfiguration(filename string) (*Config, error) {
@@ -160,7 +216,11 @@ func LoadConfiguration(filename string) (*Config, error) {
 		return nil, errors.Wrapf(err, "error parsing %s", filename)
 	}
 
+<<<<<<< HEAD
 	c.Init()
+=======
+	c.init()
+>>>>>>> 444ae6d (first commit)
 
 	return &c, nil
 }
@@ -222,6 +282,16 @@ func (c *Config) Validate() error {
 		return errors.Errorf("invalid address %s", c.Address)
 	}
 
+<<<<<<< HEAD
+=======
+	// Validate insecure address if it is configured
+	if c.InsecureAddress != "" {
+		if _, _, err := net.SplitHostPort(c.InsecureAddress); err != nil {
+			return errors.Errorf("invalid address %s", c.InsecureAddress)
+		}
+	}
+
+>>>>>>> 444ae6d (first commit)
 	if c.TLS == nil {
 		c.TLS = &DefaultTLSOptions
 	} else {
@@ -302,3 +372,10 @@ func (c *Config) GetAudiences() provisioner.Audiences {
 
 	return audiences
 }
+<<<<<<< HEAD
+=======
+========
+// SSHKeys is an alias to support older APIs.
+type SSHKeys = config.SSHKeys
+>>>>>>>> 444ae6d (first commit):authority/config.go
+>>>>>>> 444ae6d (first commit)
