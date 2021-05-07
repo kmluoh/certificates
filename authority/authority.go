@@ -15,10 +15,7 @@ import (
 	"github.com/smallstep/certificates/scep"
 
 	"github.com/pkg/errors"
-<<<<<<< HEAD
 	"github.com/smallstep/certificates/authority/admin"
-=======
->>>>>>> 444ae6d (first commit)
 	"github.com/smallstep/certificates/authority/config"
 	"github.com/smallstep/certificates/authority/mgmt"
 	authMgmtNosql "github.com/smallstep/certificates/authority/mgmt/db/nosql"
@@ -37,15 +34,11 @@ import (
 // Authority implements the Certificate Authority internal interface.
 type Authority struct {
 	config       *config.Config
-<<<<<<< HEAD
-	adminDB      mgmt.DB
-=======
-	mgmtDB       *mgmt.DB
->>>>>>> 444ae6d (first commit)
 	keyManager   kms.KeyManager
 	provisioners *provisioner.Collection
 	admins       *admin.Collection
 	db           db.AuthDB
+	adminDB      mgmt.DB
 	templates    *templates.Templates
 
 	// X509 CA
@@ -217,7 +210,6 @@ func (a *Authority) init() error {
 		}
 	}
 
-<<<<<<< HEAD
 	if len(a.config.AuthorityConfig.Provisioners) == 0 {
 		// Initialize step-ca Admin Database if it's not already initialized using
 		// WithAdminDB.
@@ -265,21 +257,6 @@ func (a *Authority) init() error {
 			if err != nil {
 				return mgmt.WrapErrorISE(err, "error getting provisioners to initialize authority")
 			}
-=======
-	// Pull AuthConfig from DB.
-	if true {
-		mgmtDB, err := authMgmtNosql.New(a.db.(nosql.DB), mgmt.DefaultAuthorityID)
-		if err != nil {
-			return err
-		}
-		_ac, err := mgmtDB.GetAuthConfig(context.Background(), mgmt.DefaultAuthorityID)
-		if err != nil {
-			return err
-		}
-		a.config.AuthorityConfig, err = _ac.ToCertificates()
-		if err != nil {
-			return err
->>>>>>> 444ae6d (first commit)
 		}
 	}
 
