@@ -12,26 +12,6 @@ import (
 	"github.com/smallstep/certificates/linkedca"
 )
 
-// CreateProvisionerRequest represents the body for a CreateProvisioner request.
-type CreateProvisionerRequest struct {
-	Type             string           `json:"type"`
-	Name             string           `json:"name"`
-	Claims           *linkedca.Claims `json:"claims"`
-	Details          []byte           `json:"details"`
-	X509Template     string           `json:"x509Template"`
-	X509TemplateData []byte           `json:"x509TemplateData"`
-	SSHTemplate      string           `json:"sshTemplate"`
-	SSHTemplateData  []byte           `json:"sshTemplateData"`
-}
-
-// Validate validates a new-provisioner request body.
-func (cpr *CreateProvisionerRequest) Validate(c *provisioner.Collection) error {
-	if _, ok := c.LoadByName(cpr.Name); ok {
-		return mgmt.NewError(mgmt.ErrorBadRequestType, "provisioner with name %s already exists", cpr.Name)
-	}
-	return nil
-}
-
 // GetProvisionersResponse is the type for GET /admin/provisioners responses.
 type GetProvisionersResponse struct {
 	Provisioners provisioner.List `json:"provisioners"`
@@ -120,6 +100,11 @@ func (h *Handler) CreateProvisioner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: validate
+	if _, ok := h.auth.GetProvisionerCollection().LoadByName(prov.Name); ok {
+		api.WriteError(w, mgmt.NewError(mgmt.ErrorBadRequestType,
+			"provisioner with name %s already exists", prov.Name))
+		return
+	}
 
 	// TODO: fix this
 	prov.Claims = mgmt.NewDefaultClaims()
@@ -137,16 +122,29 @@ func (h *Handler) CreateProvisioner(w http.ResponseWriter, r *http.Request) {
 
 // DeleteProvisioner deletes a provisioner.
 func (h *Handler) DeleteProvisioner(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
 	name := chi.URLParam(r, "name")
 
-	p, ok := h.auth.GetProvisionerCollection().LoadByName(name)
-	if !ok {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", name))
-		return
+	var (
+		p  provisioner.Interface
+		ok bool
+	)
+	if len(id) > 0 {
+		if p, ok = h.auth.GetProvisionerCollection().Load(id); !ok {
+			api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", id))
+			return
+		}
+	} else {
+		if p, ok = h.auth.GetProvisionerCollection().LoadByName(name); !ok {
+			api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", name))
+			return
+		}
 	}
 
+	// Validate
+	//  - Check that there are SUPER_ADMINs that aren't associated with this provisioner.
 	c := h.auth.GetAdminCollection()
-	if c.SuperCount() == c.SuperCountByProvisioner(name) {
+	if c.SuperCount() == c.SuperCountByProvisioner(p.GetName()) {
 		api.WriteError(w, mgmt.NewError(mgmt.ErrorBadRequestType,
 			"cannot remove provisioner %s because no super admins will remain", name))
 		return

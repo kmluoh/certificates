@@ -148,24 +148,7 @@ func (c *Collection) LoadByCertificate(cert *x509.Certificate) (Interface, bool)
 			if _, err := asn1.Unmarshal(e.Value, &provisioner); err != nil {
 				return nil, false
 			}
-			switch Type(provisioner.Type) {
-			case TypeJWK:
-				return c.Load(string(provisioner.Name) + ":" + string(provisioner.CredentialID))
-			case TypeAWS:
-				return c.Load("aws/" + string(provisioner.Name))
-			case TypeGCP:
-				return c.Load("gcp/" + string(provisioner.Name))
-			case TypeACME:
-				return c.Load("acme/" + string(provisioner.Name))
-			case TypeSCEP:
-				return c.Load("scep/" + string(provisioner.Name))
-			case TypeX5C:
-				return c.Load("x5c/" + string(provisioner.Name))
-			case TypeK8sSA:
-				return c.Load(K8sSAID)
-			default:
-				return c.Load(string(provisioner.CredentialID))
-			}
+			return c.LoadByName(string(provisioner.Name))
 		}
 	}
 

@@ -125,7 +125,7 @@ func (p *X5C) Init(config Config) error {
 		return err
 	}
 
-	p.audiences = config.Audiences.WithFragment(p.GetID())
+	p.audiences = config.Audiences.WithFragment(p.GetIDForToken())
 	return nil
 }
 

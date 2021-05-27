@@ -11,7 +11,7 @@ import (
 // SCEP provisioning flow
 type SCEP struct {
 	*base
-	ID   string `json:"id"`
+	ID   string `json:"-"`
 	Type string `json:"type"`
 	Name string `json:"name"`
 

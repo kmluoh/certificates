@@ -633,9 +633,9 @@ func (m *mockAuthority) LoadProvisionerByCertificate(cert *x509.Certificate) (pr
 	return m.ret1.(provisioner.Interface), m.err
 }
 
-func (m *mockAuthority) LoadProvisionerByID(provID string) (provisioner.Interface, error) {
-	if m.loadProvisionerByID != nil {
-		return m.loadProvisionerByID(provID)
+func (m *mockAuthority) LoadProvisionerByName(name string) (provisioner.Interface, error) {
+	if m.loadProvisionerByName != nil {
+		return m.loadProvisionerByName(name)
 	}
 	return m.ret1.(provisioner.Interface), m.err
 }

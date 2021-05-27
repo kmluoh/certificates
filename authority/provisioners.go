@@ -38,16 +38,16 @@ func (a *Authority) LoadProvisionerByCertificate(crt *x509.Certificate) (provisi
 	return p, nil
 }
 
-// LoadProvisionerByID returns an interface to the provisioner with the given ID.
-func (a *Authority) LoadProvisionerByID(id string) (provisioner.Interface, error) {
-	p, ok := a.provisioners.Load(id)
+// LoadProvisionerByName returns an interface to the provisioner with the given ID.
+func (a *Authority) LoadProvisionerByName(name string) (provisioner.Interface, error) {
+	p, ok := a.provisioners.LoadByName(name)
 	if !ok {
-		return nil, errs.NotFound("provisioner not found")
+		return nil, errs.NotFound("provisioner %s not found", name)
 	}
 	return p, nil
 }
 
-func provisionerGetOptions(p *linkedca.Provisioner) *provisioner.Options {
+func optionsToCertificates(p *linkedca.Provisioner) *provisioner.Options {
 	return &provisioner.Options{
 		X509: &provisioner.X509Options{
 			Template:     string(p.X509Template),
@@ -85,6 +85,8 @@ func provisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 		return nil, fmt.Errorf("provisioner does not have any details")
 	}
 
+	options := optionsToCertificates(p)
+
 	switch d := details.(type) {
 	case *linkedca.ProvisionerDetails_JWK:
 		jwk := new(jose.JSONWebKey)
@@ -98,12 +100,62 @@ func provisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 			Key:          jwk,
 			EncryptedKey: string(d.JWK.EncryptedPrivateKey),
 			Claims:       claims,
-			Options:      provisionerGetOptions(p),
+			Options:      options,
+		}, nil
+	case *linkedca.ProvisionerDetails_X5C:
+		var roots []byte
+		for i, root := range d.X5C.GetRoots() {
+			if i > 0 {
+				roots = append(roots, '\n')
+			}
+			roots = append(roots, root...)
+		}
+		return &provisioner.X5C{
+			ID:      p.Id,
+			Type:    p.Type.String(),
+			Name:    p.Name,
+			Roots:   roots,
+			Claims:  claims,
+			Options: options,
+		}, nil
+	case *linkedca.ProvisionerDetails_K8SSA:
+		var publicKeys []byte
+		for i, k := range d.K8SSA.GetPublicKeys() {
+			if i > 0 {
+				publicKeys = append(publicKeys, '\n')
+			}
+			publicKeys = append(publicKeys, k...)
+		}
+		return &provisioner.K8sSA{
+			ID:      p.Id,
+			Type:    p.Type.String(),
+			Name:    p.Name,
+			PubKeys: publicKeys,
+			Claims:  claims,
+			Options: options,
+		}, nil
+	case *linkedca.ProvisionerDetails_SSHPOP:
+		return &provisioner.SSHPOP{
+			ID:     p.Id,
+			Type:   p.Type.String(),
+			Name:   p.Name,
+			Claims: claims,
+		}, nil
+	case *linkedca.ProvisionerDetails_ACME:
+		cfg := d.ACME
+		return &provisioner.ACME{
+			ID:      p.Id,
+			Type:    p.Type.String(),
+			Name:    p.Name,
+			ForceCN: cfg.ForceCn,
+			Claims:  claims,
+			Options: options,
 		}, nil
 		/*
 			case *ProvisionerDetails_OIDC:
 				cfg := d.OIDC
 				return &provisioner.OIDC{
+			ID:           p.Id,
 					Type:                  p.Type.String(),
 					Name:                  p.Name,
 					TenantID:              cfg.TenantId,
@@ -154,55 +206,6 @@ func provisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 					DisableTrustOnFirstUse: cfg.DisableTrustOnFirstUse,
 					Claims:                 claims,
 					Options:                options,
-				}, nil
-			case *ProvisionerDetails_X5C:
-				var roots []byte
-				for i, k := range d.X5C.GetRoots() {
-					if b := k.GetKey().GetPublic(); b != nil {
-						if i > 0 {
-							roots = append(roots, '\n')
-						}
-						roots = append(roots, b...)
-					}
-				}
-				return &provisioner.X5C{
-					Type:    p.Type.String(),
-					Name:    p.Name,
-					Roots:   roots,
-					Claims:  claims,
-					Options: options,
-				}, nil
-			case *ProvisionerDetails_K8SSA:
-				var publicKeys []byte
-				for i, k := range d.K8SSA.GetPublicKeys() {
-					if b := k.GetKey().GetPublic(); b != nil {
-						if i > 0 {
-							publicKeys = append(publicKeys, '\n')
-						}
-						publicKeys = append(publicKeys, k.Key.Public...)
-					}
-				}
-				return &provisioner.K8sSA{
-					Type:    p.Type.String(),
-					Name:    p.Name,
-					PubKeys: publicKeys,
-					Claims:  claims,
-					Options: options,
-				}, nil
-			case *ProvisionerDetails_SSHPOP:
-				return &provisioner.SSHPOP{
-					Type:   p.Type.String(),
-					Name:   p.Name,
-					Claims: claims,
-				}, nil
-			case *ProvisionerDetails_ACME:
-				cfg := d.ACME
-				return &provisioner.ACME{
-					Type:    p.Type.String(),
-					Name:    p.Name,
-					ForceCN: cfg.ForceCn,
-					Claims:  claims,
-					Options: options,
 				}, nil
 		*/
 	default:

@@ -357,9 +357,27 @@ func (c *AdminClient) GetProvisioners(opts ...AdminOption) (provisioner.List, er
 }
 
 // RemoveProvisioner performs the DELETE /admin/provisioners/{name} request to the CA.
-func (c *AdminClient) RemoveProvisioner(name string) error {
-	var retried bool
-	u := c.endpoint.ResolveReference(&url.URL{Path: path.Join(adminURLPrefix, "provisioners", name)})
+func (c *AdminClient) RemoveProvisioner(opts ...ProvisionerOption) error {
+	var (
+		u       *url.URL
+		retried bool
+	)
+
+	o := new(provisionerOptions)
+	if err := o.apply(opts); err != nil {
+		return err
+	}
+
+	if len(o.id) > 0 {
+		u = c.endpoint.ResolveReference(&url.URL{
+			Path:     path.Join(adminURLPrefix, "provisioners/id"),
+			RawQuery: o.rawQuery(),
+		})
+	} else if len(o.name) > 0 {
+		u = c.endpoint.ResolveReference(&url.URL{Path: path.Join(adminURLPrefix, "provisioners", o.name)})
+	} else {
+		return errors.New("must set either name or id in method options")
+	}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
 		return errors.Wrapf(err, "create DELETE %s request failed", u)
@@ -386,7 +404,7 @@ func (c *AdminClient) CreateProvisioner(prov *linkedca.Provisioner) (*linkedca.P
 	if err != nil {
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "error marshaling request")
 	}
-	u := c.endpoint.ResolveReference(&url.URL{Path: "/admin/provisioners"})
+	u := c.endpoint.ResolveReference(&url.URL{Path: path.Join(adminURLPrefix, "provisioners")})
 retry:
 	resp, err := c.client.Post(u.String(), "application/json", bytes.NewReader(body))
 	if err != nil {

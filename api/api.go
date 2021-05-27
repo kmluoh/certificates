@@ -39,7 +39,7 @@ type Authority interface {
 	Renew(peer *x509.Certificate) ([]*x509.Certificate, error)
 	Rekey(peer *x509.Certificate, pk crypto.PublicKey) ([]*x509.Certificate, error)
 	LoadProvisionerByCertificate(*x509.Certificate) (provisioner.Interface, error)
-	LoadProvisionerByID(string) (provisioner.Interface, error)
+	LoadProvisionerByName(string) (provisioner.Interface, error)
 	GetProvisioners(cursor string, limit int) (provisioner.List, string, error)
 	Revoke(context.Context, *authority.RevokeOptions) error
 	GetEncryptedKey(kid string) (string, error)
