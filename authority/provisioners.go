@@ -151,24 +151,24 @@ func provisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 			Claims:  claims,
 			Options: options,
 		}, nil
+	case *linkedca.ProvisionerDetails_OIDC:
+		cfg := d.OIDC
+		return &provisioner.OIDC{
+			ID:                    p.Id,
+			Type:                  p.Type.String(),
+			Name:                  p.Name,
+			TenantID:              cfg.TenantId,
+			ClientID:              cfg.ClientId,
+			ClientSecret:          cfg.ClientSecret,
+			ConfigurationEndpoint: cfg.ConfigurationEndpoint,
+			Admins:                cfg.Admins,
+			Domains:               cfg.Domains,
+			Groups:                cfg.Groups,
+			ListenAddress:         cfg.ListenAddress,
+			Claims:                claims,
+			Options:               options,
+		}, nil
 		/*
-			case *ProvisionerDetails_OIDC:
-				cfg := d.OIDC
-				return &provisioner.OIDC{
-			ID:           p.Id,
-					Type:                  p.Type.String(),
-					Name:                  p.Name,
-					TenantID:              cfg.TenantId,
-					ClientID:              cfg.ClientId,
-					ClientSecret:          cfg.ClientSecret,
-					ConfigurationEndpoint: cfg.ConfigurationEndpoint,
-					Admins:                cfg.Admins,
-					Domains:               cfg.Domains,
-					Groups:                cfg.Groups,
-					ListenAddress:         cfg.ListenAddress,
-					Claims:                claims,
-					Options:               options,
-				}, nil
 			case *ProvisionerDetails_GCP:
 				cfg := d.GCP
 				return &provisioner.GCP{

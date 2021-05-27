@@ -25,6 +25,8 @@ const (
 	ErrorDeletedType
 	// ErrorBadRequestType bad request.
 	ErrorBadRequestType
+	// ErrorNotImplementedType not implemented.
+	ErrorNotImplementedType
 	// ErrorServerInternalType internal server error.
 	ErrorServerInternalType
 )
@@ -41,6 +43,8 @@ func (ap ProblemType) String() string {
 		return "deleted"
 	case ErrorBadRequestType:
 		return "badRequest"
+	case ErrorNotImplementedType:
+		return "notImplemented"
 	case ErrorServerInternalType:
 		return "internalServerError"
 	default:
@@ -75,12 +79,17 @@ var (
 		ErrorDeletedType: {
 			typ:     ErrorDeletedType.String(),
 			details: "resource is deleted",
-			status:  403,
+			status:  http.StatusUnauthorized,
+		},
+		ErrorNotImplementedType: {
+			typ:     ErrorNotImplementedType.String(),
+			details: "not implemented",
+			status:  http.StatusNotImplemented,
 		},
 		ErrorBadRequestType: {
 			typ:     ErrorBadRequestType.String(),
 			details: "bad request",
-			status:  400,
+			status:  http.StatusBadRequest,
 		},
 		ErrorServerInternalType: errorServerInternalMetadata,
 	}
