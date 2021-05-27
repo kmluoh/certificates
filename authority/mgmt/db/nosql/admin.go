@@ -108,7 +108,16 @@ func (db *DB) GetAdmins(ctx context.Context) ([]*linkedca.Admin, error) {
 	for _, entry := range dbEntries {
 		adm, err := unmarshalAdmin(entry.Value, string(entry.Key))
 		if err != nil {
-			return nil, err
+			switch k := err.(type) {
+			case *mgmt.Error:
+				if k.IsType(mgmt.ErrorDeletedType) {
+					continue
+				} else {
+					return nil, err
+				}
+			default:
+				return nil, err
+			}
 		}
 		if adm.AuthorityId != db.authorityID {
 			continue

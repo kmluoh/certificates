@@ -133,7 +133,16 @@ func (db *DB) GetProvisioners(ctx context.Context) ([]*linkedca.Provisioner, err
 	for _, entry := range dbEntries {
 		prov, err := unmarshalProvisioner(entry.Value, string(entry.Key))
 		if err != nil {
-			return nil, err
+			switch k := err.(type) {
+			case *mgmt.Error:
+				if k.IsType(mgmt.ErrorDeletedType) {
+					continue
+				} else {
+					return nil, err
+				}
+			default:
+				return nil, err
+			}
 		}
 		if prov.AuthorityId != db.authorityID {
 			continue

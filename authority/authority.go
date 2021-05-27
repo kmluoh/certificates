@@ -146,7 +146,7 @@ func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
 	}
 	a.config.AuthorityConfig.Admins, err = a.adminDB.GetAdmins(ctx)
 	if err != nil {
-		return mgmt.WrapErrorISE(err, "error getting provisioners to initialize authority")
+		return mgmt.WrapErrorISE(err, "error getting admins to initialize authority")
 	}
 
 	// Merge global and configuration claims
