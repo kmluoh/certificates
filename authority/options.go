@@ -8,10 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/smallstep/certificates/authority/config"
-<<<<<<< HEAD
 	"github.com/smallstep/certificates/authority/mgmt"
-=======
->>>>>>> 444ae6d (first commit)
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/cas"
 	casapi "github.com/smallstep/certificates/cas/apiv1"

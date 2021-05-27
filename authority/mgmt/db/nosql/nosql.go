@@ -24,7 +24,7 @@ type DB struct {
 
 // New configures and returns a new Authority DB backend implemented using a nosql DB.
 func New(db nosqlDB.DB, authorityID string) (*DB, error) {
-	tables := [][]byte{authorityAdminsTable, authorityConfigsTable, authorityProvisionersTable, authorityProvisionersNameIDIndexTable}
+	tables := [][]byte{authorityAdminsTable, authorityConfigsTable, authorityProvisionersTable}
 	for _, b := range tables {
 		if err := db.CreateTable(b); err != nil {
 			return nil, errors.Wrapf(err, "error creating table %s",

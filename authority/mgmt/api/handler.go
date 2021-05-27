@@ -4,10 +4,7 @@ import (
 	"time"
 
 	"github.com/smallstep/certificates/api"
-<<<<<<< HEAD
 	"github.com/smallstep/certificates/authority"
-=======
->>>>>>> c138b2e (first steps)
 	"github.com/smallstep/certificates/authority/mgmt"
 )
 
@@ -23,7 +20,6 @@ var clock Clock
 
 // Handler is the ACME API request handler.
 type Handler struct {
-<<<<<<< HEAD
 	db   mgmt.DB
 	auth *authority.Authority
 }
@@ -31,14 +27,6 @@ type Handler struct {
 // NewHandler returns a new Authority Config Handler.
 func NewHandler(auth *authority.Authority) api.RouterHandler {
 	return &Handler{auth.GetAdminDatabase(), auth}
-=======
-	db mgmt.DB
-}
-
-// NewHandler returns a new Authority Config Handler.
-func NewHandler(db mgmt.DB) api.RouterHandler {
-	return &Handler{db}
->>>>>>> c138b2e (first steps)
 }
 
 // Route traffic and implement the Router interface.

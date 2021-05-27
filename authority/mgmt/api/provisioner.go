@@ -61,12 +61,24 @@ func (upr *UpdateProvisionerRequest) Validate(c *provisioner.Collection) error {
 // GetProvisioner returns the requested provisioner, or an error.
 func (h *Handler) GetProvisioner(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	id := r.URL.Query().Get("id")
 	name := chi.URLParam(r, "name")
 
-	p, ok := h.auth.GetProvisionerCollection().LoadByName(name)
-	if !ok {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", name))
-		return
+	var (
+		p  provisioner.Interface
+		ok bool
+	)
+	if len(id) > 0 {
+		if p, ok = h.auth.GetProvisionerCollection().Load(id); !ok {
+			api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", name))
+			return
+		}
+	} else {
+		if p, ok = h.auth.GetProvisionerCollection().LoadByName(name); !ok {
+			api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", id))
+			return
+		}
 	}
 
 	prov, err := h.db.GetProvisioner(ctx, p.GetID())

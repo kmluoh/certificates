@@ -20,6 +20,8 @@ import (
 	"github.com/smallstep/certificates/authority/config"
 	"github.com/smallstep/certificates/authority/mgmt"
 	mgmtAPI "github.com/smallstep/certificates/authority/mgmt/api"
+	"github.com/smallstep/certificates/db"
+	"github.com/smallstep/certificates/logging"
 	"github.com/smallstep/certificates/monitoring"
 	"github.com/smallstep/certificates/scep"
 	scepAPI "github.com/smallstep/certificates/scep/api"
@@ -77,11 +79,12 @@ func WithDatabase(db db.AuthDB) Option {
 // CA is the type used to build the complete certificate authority. It builds
 // the HTTP server, set ups the middlewares and the HTTP handlers.
 type CA struct {
-	auth    *authority.Authority
-	config  *config.Config
-	srv     *server.Server
-	opts    *options
-	renewer *TLSRenewer
+	auth        *authority.Authority
+	config      *config.Config
+	srv         *server.Server
+	insecureSrv *server.Server
+	opts        *options
+	renewer     *TLSRenewer
 }
 
 // New creates and initializes the CA with the given configuration and options.
@@ -127,6 +130,9 @@ func (ca *CA) Init(config *config.Config) (*CA, error) {
 	// Using chi as the main router
 	mux := chi.NewRouter()
 	handler := http.Handler(mux)
+
+	insecureMux := chi.NewRouter()
+	insecureHandler := http.Handler(insecureMux)
 
 	// Add regular CA api endpoints in / and /1.0
 	routerHandler := api.New(auth)

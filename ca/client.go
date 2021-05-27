@@ -372,6 +372,8 @@ type ProvisionerOption func(o *provisionerOptions) error
 type provisionerOptions struct {
 	cursor string
 	limit  int
+	id     string
+	name   string
 }
 
 func (o *provisionerOptions) apply(opts []ProvisionerOption) (err error) {
@@ -391,6 +393,12 @@ func (o *provisionerOptions) rawQuery() string {
 	if o.limit > 0 {
 		v.Set("limit", strconv.Itoa(o.limit))
 	}
+	if len(o.id) > 0 {
+		v.Set("id", o.id)
+	}
+	if len(o.name) > 0 {
+		v.Set("name", o.name)
+	}
 	return v.Encode()
 }
 
@@ -406,6 +414,22 @@ func WithProvisionerCursor(cursor string) ProvisionerOption {
 func WithProvisionerLimit(limit int) ProvisionerOption {
 	return func(o *provisionerOptions) error {
 		o.limit = limit
+		return nil
+	}
+}
+
+// WithProvisionerID will request the given provisioner.
+func WithProvisionerID(id string) ProvisionerOption {
+	return func(o *provisionerOptions) error {
+		o.id = id
+		return nil
+	}
+}
+
+// WithProvisionerName will request the given provisioner.
+func WithProvisionerName(name string) ProvisionerOption {
+	return func(o *provisionerOptions) error {
+		o.name = name
 		return nil
 	}
 }
