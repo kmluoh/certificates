@@ -86,7 +86,7 @@ func (h *Handler) GetProvisioner(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, err)
 		return
 	}
-	api.JSON(w, prov)
+	api.ProtoJSON(w, prov)
 }
 
 // GetProvisioners returns all provisioners associated with the authority.
@@ -114,7 +114,7 @@ func (h *Handler) CreateProvisioner(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var prov = new(linkedca.Provisioner)
-	if err := api.ReadJSON(r.Body, prov); err != nil {
+	if err := api.ReadProtoJSON(r.Body, prov); err != nil {
 		api.WriteError(w, err)
 		return
 	}
@@ -128,7 +128,7 @@ func (h *Handler) CreateProvisioner(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, err)
 		return
 	}
-	api.JSONStatus(w, prov, http.StatusCreated)
+	api.ProtoJSONStatus(w, prov, http.StatusCreated)
 
 	if err := h.auth.ReloadAuthConfig(ctx); err != nil {
 		fmt.Printf("err = %+v\n", err)

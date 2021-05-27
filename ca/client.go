@@ -32,6 +32,8 @@ import (
 	"go.step.sm/crypto/pemutil"
 	"go.step.sm/crypto/x509util"
 	"golang.org/x/net/http2"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
@@ -1233,6 +1235,15 @@ func getRootCAPath() string {
 func readJSON(r io.ReadCloser, v interface{}) error {
 	defer r.Close()
 	return json.NewDecoder(r).Decode(v)
+}
+
+func readProtoJSON(r io.ReadCloser, m proto.Message) error {
+	defer r.Close()
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	return protojson.Unmarshal(data, m)
 }
 
 func readError(r io.ReadCloser) error {

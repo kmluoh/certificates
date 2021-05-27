@@ -15,6 +15,7 @@ import (
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
 	"github.com/smallstep/certificates/linkedca"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 var adminURLPrefix = "admin"
@@ -299,7 +300,7 @@ retry:
 		return nil, readAdminError(resp.Body)
 	}
 	var prov = new(linkedca.Provisioner)
-	if err := readJSON(resp.Body, prov); err != nil {
+	if err := readProtoJSON(resp.Body, prov); err != nil {
 		return nil, errors.Wrapf(err, "error reading %s", u)
 	}
 	return prov, nil
@@ -381,7 +382,7 @@ retry:
 // CreateProvisioner performs the POST /admin/provisioners request to the CA.
 func (c *AdminClient) CreateProvisioner(prov *linkedca.Provisioner) (*linkedca.Provisioner, error) {
 	var retried bool
-	body, err := json.Marshal(prov)
+	body, err := protojson.Marshal(prov)
 	if err != nil {
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "error marshaling request")
 	}
@@ -399,7 +400,7 @@ retry:
 		return nil, readAdminError(resp.Body)
 	}
 	var nuProv = new(linkedca.Provisioner)
-	if err := readJSON(resp.Body, nuProv); err != nil {
+	if err := readProtoJSON(resp.Body, nuProv); err != nil {
 		return nil, errors.Wrapf(err, "error reading %s", u)
 	}
 	return nuProv, nil
