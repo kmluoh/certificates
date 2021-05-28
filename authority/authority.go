@@ -537,6 +537,11 @@ func (a *Authority) init() error {
 	return nil
 }
 
+// GetRootX509Certs returns the configured root X509 certificates.
+func (a *Authority) GetRootX509Certs() []*x509.Certificate {
+	return a.rootX509Certs
+}
+
 // GetDatabase returns the authority database. If the configuration does not
 // define a database, GetDatabase will return a db.SimpleDB instance.
 func (a *Authority) GetDatabase() db.AuthDB {

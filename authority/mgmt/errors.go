@@ -27,6 +27,8 @@ const (
 	ErrorBadRequestType
 	// ErrorNotImplementedType not implemented.
 	ErrorNotImplementedType
+	// ErrorUnauthorizedType internal server error.
+	ErrorUnauthorizedType
 	// ErrorServerInternalType internal server error.
 	ErrorServerInternalType
 )
@@ -45,6 +47,8 @@ func (ap ProblemType) String() string {
 		return "badRequest"
 	case ErrorNotImplementedType:
 		return "notImplemented"
+	case ErrorUnauthorizedType:
+		return "unauthorized"
 	case ErrorServerInternalType:
 		return "internalServerError"
 	default:
@@ -90,6 +94,11 @@ var (
 			typ:     ErrorBadRequestType.String(),
 			details: "bad request",
 			status:  http.StatusBadRequest,
+		},
+		ErrorUnauthorizedType: {
+			typ:     ErrorUnauthorizedType.String(),
+			details: "unauthorized",
+			status:  http.StatusUnauthorized,
 		},
 		ErrorServerInternalType: errorServerInternalMetadata,
 	}

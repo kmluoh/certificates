@@ -2,12 +2,14 @@ package ca
 
 import (
 	"bytes"
+	"crypto/x509"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/smallstep/certificates/authority/mgmt"
@@ -15,6 +17,10 @@ import (
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
 	"github.com/smallstep/certificates/linkedca"
+	"go.step.sm/cli-utils/token"
+	"go.step.sm/cli-utils/token/provision"
+	"go.step.sm/crypto/jose"
+	"go.step.sm/crypto/randutil"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -22,10 +28,16 @@ var adminURLPrefix = "admin"
 
 // AdminClient implements an HTTP client for the CA server.
 type AdminClient struct {
-	client    *uaClient
-	endpoint  *url.URL
-	retryFunc RetryFunc
-	opts      []ClientOption
+	client      *uaClient
+	endpoint    *url.URL
+	retryFunc   RetryFunc
+	opts        []ClientOption
+	x5cJWK      *jose.JSONWebKey
+	x5cCertFile string
+	x5cCertStrs []string
+	x5cCert     *x509.Certificate
+	x5cIssuer   string
+	x5cSubject  string
 }
 
 // NewAdminClient creates a new AdminClient with the given endpoint and options.
@@ -45,11 +57,43 @@ func NewAdminClient(endpoint string, opts ...ClientOption) (*AdminClient, error)
 	}
 
 	return &AdminClient{
-		client:    newClient(tr),
-		endpoint:  u,
-		retryFunc: o.retryFunc,
-		opts:      opts,
+		client:      newClient(tr),
+		endpoint:    u,
+		retryFunc:   o.retryFunc,
+		opts:        opts,
+		x5cJWK:      o.x5cJWK,
+		x5cCertFile: o.x5cCertFile,
+		x5cCertStrs: o.x5cCertStrs,
+		x5cCert:     o.x5cCert,
+		x5cIssuer:   o.x5cIssuer,
+		x5cSubject:  o.x5cSubject,
 	}, nil
+}
+
+func (c *AdminClient) generateAdminToken(path string) (string, error) {
+	// A random jwt id will be used to identify duplicated tokens
+	jwtID, err := randutil.Hex(64) // 256 bits
+	if err != nil {
+		return "", err
+	}
+
+	now := time.Now()
+	tokOptions := []token.Options{
+		token.WithJWTID(jwtID),
+		token.WithKid(c.x5cJWK.KeyID),
+		token.WithIssuer(c.x5cIssuer),
+		token.WithAudience(path),
+		token.WithValidity(now, now.Add(token.DefaultValidity)),
+		token.WithX5CCerts(c.x5cCertStrs),
+	}
+
+	tok, err := provision.New(c.x5cSubject, tokOptions...)
+	if err != nil {
+		return "", err
+	}
+
+	return tok.SignedString(c.x5cJWK.Algorithm, c.x5cJWK.Key)
+
 }
 
 func (c *AdminClient) retryOnError(r *http.Response) bool {
@@ -149,8 +193,17 @@ func (c *AdminClient) GetAdminsPaginate(opts ...AdminOption) (*mgmtAPI.GetAdmins
 		Path:     "/admin/admins",
 		RawQuery: o.rawQuery(),
 	})
+	tok, err := c.generateAdminToken(u.Path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error generating admin token")
+	}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "create GET %s request failed", u)
+	}
+	req.Header.Add("Authorization", tok)
 retry:
-	resp, err := c.client.Get(u.String())
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "client GET %s failed", u)
 	}
@@ -189,15 +242,24 @@ func (c *AdminClient) GetAdmins(opts ...AdminOption) ([]*linkedca.Admin, error) 
 }
 
 // CreateAdmin performs the POST /admin/admins request to the CA.
-func (c *AdminClient) CreateAdmin(req *mgmtAPI.CreateAdminRequest) (*linkedca.Admin, error) {
+func (c *AdminClient) CreateAdmin(createAdminRequest *mgmtAPI.CreateAdminRequest) (*linkedca.Admin, error) {
 	var retried bool
-	body, err := json.Marshal(req)
+	body, err := json.Marshal(createAdminRequest)
 	if err != nil {
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "error marshaling request")
 	}
 	u := c.endpoint.ResolveReference(&url.URL{Path: "/admin/admins"})
+	tok, err := c.generateAdminToken(u.Path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error generating admin token")
+	}
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(body))
+	if err != nil {
+		return nil, errors.Wrapf(err, "create GET %s request failed", u)
+	}
+	req.Header.Add("Authorization", tok)
 retry:
-	resp, err := c.client.Post(u.String(), "application/json", bytes.NewReader(body))
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "client POST %s failed", u)
 	}
@@ -219,10 +281,15 @@ retry:
 func (c *AdminClient) RemoveAdmin(id string) error {
 	var retried bool
 	u := c.endpoint.ResolveReference(&url.URL{Path: path.Join(adminURLPrefix, "admins", id)})
+	tok, err := c.generateAdminToken(u.Path)
+	if err != nil {
+		return errors.Wrapf(err, "error generating admin token")
+	}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
 		return errors.Wrapf(err, "create DELETE %s request failed", u)
 	}
+	req.Header.Add("Authorization", tok)
 retry:
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -246,10 +313,15 @@ func (c *AdminClient) UpdateAdmin(id string, uar *mgmtAPI.UpdateAdminRequest) (*
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "error marshaling request")
 	}
 	u := c.endpoint.ResolveReference(&url.URL{Path: path.Join(adminURLPrefix, "admins", id)})
+	tok, err := c.generateAdminToken(u.Path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error generating admin token")
+	}
 	req, err := http.NewRequest("PATCH", u.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, errors.Wrapf(err, "create PUT %s request failed", u)
 	}
+	req.Header.Add("Authorization", tok)
 retry:
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -287,8 +359,17 @@ func (c *AdminClient) GetProvisioner(opts ...ProvisionerOption) (*linkedca.Provi
 	} else {
 		return nil, errors.New("must set either name or id in method options")
 	}
+	tok, err := c.generateAdminToken(u.Path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error generating admin token")
+	}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "create PUT %s request failed", u)
+	}
+	req.Header.Add("Authorization", tok)
 retry:
-	resp, err := c.client.Get(u.String())
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "client GET %s failed", u)
 	}
@@ -317,8 +398,17 @@ func (c *AdminClient) GetProvisionersPaginate(opts ...ProvisionerOption) (*mgmtA
 		Path:     "/admin/provisioners",
 		RawQuery: o.rawQuery(),
 	})
+	tok, err := c.generateAdminToken(u.Path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error generating admin token")
+	}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "create PUT %s request failed", u)
+	}
+	req.Header.Add("Authorization", tok)
 retry:
-	resp, err := c.client.Get(u.String())
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "client GET %s failed", u)
 	}
@@ -378,10 +468,15 @@ func (c *AdminClient) RemoveProvisioner(opts ...ProvisionerOption) error {
 	} else {
 		return errors.New("must set either name or id in method options")
 	}
+	tok, err := c.generateAdminToken(u.Path)
+	if err != nil {
+		return errors.Wrapf(err, "error generating admin token")
+	}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
 		return errors.Wrapf(err, "create DELETE %s request failed", u)
 	}
+	req.Header.Add("Authorization", tok)
 retry:
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -405,8 +500,17 @@ func (c *AdminClient) CreateProvisioner(prov *linkedca.Provisioner) (*linkedca.P
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "error marshaling request")
 	}
 	u := c.endpoint.ResolveReference(&url.URL{Path: path.Join(adminURLPrefix, "provisioners")})
+	tok, err := c.generateAdminToken(u.Path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error generating admin token")
+	}
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(body))
+	if err != nil {
+		return nil, errors.Wrapf(err, "create POST %s request failed", u)
+	}
+	req.Header.Add("Authorization", tok)
 retry:
-	resp, err := c.client.Post(u.String(), "application/json", bytes.NewReader(body))
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "client POST %s failed", u)
 	}
@@ -432,10 +536,15 @@ func (c *AdminClient) UpdateProvisioner(id string, upr *mgmtAPI.UpdateProvisione
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "error marshaling request")
 	}
 	u := c.endpoint.ResolveReference(&url.URL{Path: path.Join(adminURLPrefix, "provisioners", id)})
+	tok, err := c.generateAdminToken(u.Path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error generating admin token")
+	}
 	req, err := http.NewRequest("PUT", u.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, errors.Wrapf(err, "create PUT %s request failed", u)
 	}
+	req.Header.Add("Authorization", tok)
 retry:
 	resp, err := c.client.Do(req)
 	if err != nil {

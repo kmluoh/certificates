@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/x509"
 	"time"
 
 	"github.com/smallstep/certificates/api"
@@ -20,23 +21,35 @@ var clock Clock
 
 // Handler is the ACME API request handler.
 type Handler struct {
-	db   mgmt.DB
-	auth *authority.Authority
+	db       mgmt.DB
+	auth     *authority.Authority
+	rootPool *x509.CertPool
 }
 
 // NewHandler returns a new Authority Config Handler.
 func NewHandler(auth *authority.Authority) api.RouterHandler {
-	return &Handler{auth.GetAdminDatabase(), auth}
+	h := &Handler{db: auth.GetAdminDatabase(), auth: auth}
+
+	h.rootPool = x509.NewCertPool()
+	for _, cert := range auth.GetRootX509Certs() {
+		h.rootPool.AddCert(cert)
+	}
+
+	return h
 }
 
 // Route traffic and implement the Router interface.
 func (h *Handler) Route(r api.Router) {
+	authnz := func(next nextHTTP) nextHTTP {
+		return h.extractAuthorizeTokenAdmin(h.requireAPIEnabled(next))
+	}
+
 	// Provisioners
-	r.MethodFunc("GET", "/provisioners/{name}", h.requireAPIEnabled(h.GetProvisioner))
-	r.MethodFunc("GET", "/provisioners", h.requireAPIEnabled(h.GetProvisioners))
-	r.MethodFunc("POST", "/provisioners", h.requireAPIEnabled(h.CreateProvisioner))
-	r.MethodFunc("PUT", "/provisioners/{name}", h.requireAPIEnabled(h.UpdateProvisioner))
-	r.MethodFunc("DELETE", "/provisioners/{name}", h.requireAPIEnabled(h.DeleteProvisioner))
+	r.MethodFunc("GET", "/provisioners/{name}", authnz(h.GetProvisioner))
+	r.MethodFunc("GET", "/provisioners", authnz(h.GetProvisioners))
+	r.MethodFunc("POST", "/provisioners", authnz(h.CreateProvisioner))
+	r.MethodFunc("PUT", "/provisioners/{name}", authnz(h.UpdateProvisioner))
+	r.MethodFunc("DELETE", "/provisioners/{name}", authnz(h.DeleteProvisioner))
 
 	// Admins
 	r.MethodFunc("GET", "/admins/{id}", h.requireAPIEnabled(h.GetAdmin))
