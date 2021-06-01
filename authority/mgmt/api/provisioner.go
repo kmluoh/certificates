@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/smallstep/certificates/api"
+	"github.com/smallstep/certificates/authority"
 	"github.com/smallstep/certificates/authority/mgmt"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
@@ -100,9 +101,20 @@ func (h *Handler) CreateProvisioner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: validate
-	if _, ok := h.auth.GetProvisionerCollection().LoadByName(prov.Name); ok {
+	clxn := h.auth.GetProvisionerCollection()
+	if _, ok := clxn.LoadByName(prov.Name); ok {
 		api.WriteError(w, mgmt.NewError(mgmt.ErrorBadRequestType,
 			"provisioner with name %s already exists", prov.Name))
+		return
+	}
+	certProv, err := authority.ProvisionerToCertificates(prov)
+	if err != nil {
+		api.WriteError(w, mgmt.WrapErrorISE(err, "error converting from linkedca provisioner"))
+		return
+	}
+	if _, ok := clxn.LoadByTokenID(certProv.GetIDForToken()); ok {
+		api.WriteError(w, mgmt.NewError(mgmt.ErrorBadRequestType,
+			"provisioner with token-id %s already exists", certProv.GetIDForToken()))
 		return
 	}
 

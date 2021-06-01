@@ -231,7 +231,7 @@ func (a *Authority) init() error {
 			if err != nil {
 				return mgmt.WrapErrorISE(err, "error creating first provisioner")
 			}
-			certProv, err := provisionerToCertificates(prov)
+			certProv, err := ProvisionerToCertificates(prov)
 			if err != nil {
 				return mgmt.WrapErrorISE(err, "error converting provisioner to certificates type")
 			}

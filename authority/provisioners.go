@@ -47,6 +47,18 @@ func (a *Authority) LoadProvisionerByName(name string) (provisioner.Interface, e
 	return p, nil
 }
 
+func provisionerListToCertificates(l []*linkedca.Provisioner) (provisioner.List, error) {
+	var nu provisioner.List
+	for _, p := range l {
+		certProv, err := ProvisionerToCertificates(p)
+		if err != nil {
+			return nil, err
+		}
+		nu = append(nu, certProv)
+	}
+	return nu, nil
+}
+
 func optionsToCertificates(p *linkedca.Provisioner) *provisioner.Options {
 	return &provisioner.Options{
 		X509: &provisioner.X509Options{
@@ -60,21 +72,91 @@ func optionsToCertificates(p *linkedca.Provisioner) *provisioner.Options {
 	}
 }
 
-func provisionerListToCertificates(l []*linkedca.Provisioner) (provisioner.List, error) {
-	var nu provisioner.List
-	for _, p := range l {
-		certProv, err := provisionerToCertificates(p)
-		if err != nil {
-			return nil, err
-		}
-		nu = append(nu, certProv)
+// claimsToCertificates converts the linkedca provisioner claims type to the
+// certifictes claims type.
+func claimsToCertificates(c *linkedca.Claims) (*provisioner.Claims, error) {
+	if c == nil {
+		return nil, nil
 	}
-	return nu, nil
+
+	pc := &provisioner.Claims{
+		DisableRenewal: &c.DisableRenewal,
+	}
+
+	var err error
+
+	if xc := c.X509; xc != nil {
+		if d := xc.Durations; d != nil {
+			if len(d.Min) > 0 {
+				pc.MinTLSDur, err = provisioner.NewDuration(d.Min)
+				if err != nil {
+					return nil, mgmt.WrapErrorISE(err, "error parsing claims.minTLSDur: %s", d.Min)
+				}
+			}
+			if len(d.Max) > 0 {
+				pc.MaxTLSDur, err = provisioner.NewDuration(d.Max)
+				if err != nil {
+					return nil, mgmt.WrapErrorISE(err, "error parsing claims.maxTLSDur: %s", d.Max)
+				}
+			}
+			if len(d.Default) > 0 {
+				pc.DefaultTLSDur, err = provisioner.NewDuration(d.Default)
+				if err != nil {
+					return nil, mgmt.WrapErrorISE(err, "error parsing claims.defaultTLSDur: %s", d.Default)
+				}
+			}
+		}
+	}
+	if sc := c.Ssh; sc != nil {
+		pc.EnableSSHCA = &sc.Enabled
+		if d := sc.UserDurations; d != nil {
+			if len(d.Min) > 0 {
+				pc.MinUserSSHDur, err = provisioner.NewDuration(d.Min)
+				if err != nil {
+					return nil, mgmt.WrapErrorISE(err, "error parsing claims.minUserSSHDur: %s", d.Min)
+				}
+			}
+			if len(d.Max) > 0 {
+				pc.MaxUserSSHDur, err = provisioner.NewDuration(d.Max)
+				if err != nil {
+					return nil, mgmt.WrapErrorISE(err, "error parsing claims.maxUserSSHDur: %s", d.Max)
+				}
+			}
+			if len(d.Default) > 0 {
+				pc.DefaultUserSSHDur, err = provisioner.NewDuration(d.Default)
+				if err != nil {
+					return nil, mgmt.WrapErrorISE(err, "error parsing claims.defaultUserSSHDur: %s", d.Default)
+				}
+			}
+		}
+		if d := sc.HostDurations; d != nil {
+			if len(d.Min) > 0 {
+				pc.MinHostSSHDur, err = provisioner.NewDuration(d.Min)
+				if err != nil {
+					return nil, mgmt.WrapErrorISE(err, "error parsing claims.minHostSSHDur: %s", d.Min)
+				}
+			}
+			if len(d.Max) > 0 {
+				pc.MaxUserSSHDur, err = provisioner.NewDuration(d.Max)
+				if err != nil {
+					return nil, mgmt.WrapErrorISE(err, "error parsing claims.maxHostSSHDur: %s", d.Max)
+				}
+			}
+			if len(d.Default) > 0 {
+				pc.DefaultUserSSHDur, err = provisioner.NewDuration(d.Default)
+				if err != nil {
+					return nil, mgmt.WrapErrorISE(err, "error parsing claims.defaultHostSSHDur: %s", d.Default)
+				}
+			}
+		}
+	}
+
+	return pc, nil
 }
 
-// provisionerToCertificates converts the landlord provisioner type to the open source
-// provisioner type.
-func provisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, error) {
+// ProvisionerToCertificates converts the linkedca provisioner type to the certificates provisioner
+// interface.
+func ProvisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, error) {
 	claims, err := claimsToCertificates(p.Claims)
 	if err != nil {
 		return nil, err
@@ -211,86 +293,4 @@ func provisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 	default:
 		return nil, fmt.Errorf("provisioner %s not implemented", p.Type)
 	}
-}
-
-// claimsToCertificates converts the landlord provisioner claims type to the open source
-// (step-ca) claims type.
-func claimsToCertificates(c *linkedca.Claims) (*provisioner.Claims, error) {
-	if c == nil {
-		return nil, nil
-	}
-
-	pc := &provisioner.Claims{
-		DisableRenewal: &c.DisableRenewal,
-	}
-
-	var err error
-
-	if xc := c.X509; xc != nil {
-		if d := xc.Durations; d != nil {
-			if len(d.Min) > 0 {
-				pc.MinTLSDur, err = provisioner.NewDuration(d.Min)
-				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.minTLSDur: %s", d.Min)
-				}
-			}
-			if len(d.Max) > 0 {
-				pc.MaxTLSDur, err = provisioner.NewDuration(d.Max)
-				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.maxTLSDur: %s", d.Max)
-				}
-			}
-			if len(d.Default) > 0 {
-				pc.DefaultTLSDur, err = provisioner.NewDuration(d.Default)
-				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.defaultTLSDur: %s", d.Default)
-				}
-			}
-		}
-	}
-	if sc := c.Ssh; sc != nil {
-		pc.EnableSSHCA = &sc.Enabled
-		if d := sc.UserDurations; d != nil {
-			if len(d.Min) > 0 {
-				pc.MinUserSSHDur, err = provisioner.NewDuration(d.Min)
-				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.minUserSSHDur: %s", d.Min)
-				}
-			}
-			if len(d.Max) > 0 {
-				pc.MaxUserSSHDur, err = provisioner.NewDuration(d.Max)
-				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.maxUserSSHDur: %s", d.Max)
-				}
-			}
-			if len(d.Default) > 0 {
-				pc.DefaultUserSSHDur, err = provisioner.NewDuration(d.Default)
-				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.defaultUserSSHDur: %s", d.Default)
-				}
-			}
-		}
-		if d := sc.HostDurations; d != nil {
-			if len(d.Min) > 0 {
-				pc.MinHostSSHDur, err = provisioner.NewDuration(d.Min)
-				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.minHostSSHDur: %s", d.Min)
-				}
-			}
-			if len(d.Max) > 0 {
-				pc.MaxUserSSHDur, err = provisioner.NewDuration(d.Max)
-				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.maxHostSSHDur: %s", d.Max)
-				}
-			}
-			if len(d.Default) > 0 {
-				pc.DefaultUserSSHDur, err = provisioner.NewDuration(d.Default)
-				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.defaultHostSSHDur: %s", d.Default)
-				}
-			}
-		}
-	}
-
-	return pc, nil
 }
