@@ -28,7 +28,7 @@ func (h *Handler) requireAPIEnabled(next nextHTTP) nextHTTP {
 	}
 }
 
-func (h *Handler) authorizeToken(token string) (*linkedca.Admin, error) {
+func (h *Handler) authorizeToken(r *http.Request, token string) (*linkedca.Admin, error) {
 	jwt, err := jose.ParseSigned(token)
 	if err != nil {
 		return nil, mgmt.WrapError(mgmt.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error parsing x5c token")
@@ -71,25 +71,32 @@ func (h *Handler) authorizeToken(token string) (*linkedca.Admin, error) {
 		return nil, mgmt.WrapError(mgmt.ErrorUnauthorizedType, err, "x5c.authorizeToken; invalid x5c claims")
 	}
 
-	/*
-		// validate audiences with the defaults
-		if !matchesAudience(claims.Audience, audiences) {
-			return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType,
-				"x5c.authorizeToken; x5c token has invalid audience "+
-					"claim (aud); expected %s, but got %s", audiences, claims.Audience)
-		}
-	*/
+	// validate audience: path matches the current path
+	if r.URL.Path != claims.Audience[0] {
+		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType,
+			"x5c.authorizeToken; x5c token has invalid audience "+
+				"claim (aud); expected %s, but got %s", r.URL.Path, claims.Audience)
+	}
 
 	if claims.Subject == "" {
 		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType,
 			"x5c.authorizeToken; x5c token subject cannot be empty")
 	}
 
-	adm, ok := h.auth.GetAdminCollection().LoadBySubProv(claims.Subject, claims.Issuer)
-	if !ok {
+	var adm *linkedca.Admin
+	adminFound := false
+	adminSANs := append([]string{leaf.Subject.CommonName}, leaf.DNSNames...)
+	adminSANs = append(adminSANs, leaf.EmailAddresses...)
+	for _, san := range adminSANs {
+		if adm, ok = h.auth.GetAdminCollection().LoadBySubProv(san, claims.Issuer); ok {
+			adminFound = true
+			break
+		}
+	}
+	if !adminFound {
 		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType,
-			"adminHandler.authorizeToken; unable to load admin with subject %s and provisioner %s",
-			claims.Subject, claims.Issuer)
+			"adminHandler.authorizeToken; unable to load admin with subject(s) %s and provisioner %s",
+			adminSANs, claims.Issuer)
 	}
 
 	return adm, nil
@@ -109,7 +116,7 @@ func (h *Handler) extractAuthorizeTokenAdmin(next nextHTTP) nextHTTP {
 
 		ctx = context.WithValue(r.Context(), tokenContextKey, tok)
 
-		adm, err := h.authorizeToken(tok)
+		adm, err := h.authorizeToken(r, tok)
 		if err != nil {
 			api.WriteError(w, err)
 			return
