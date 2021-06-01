@@ -99,6 +99,10 @@ func (h *Handler) authorizeToken(r *http.Request, token string) (*linkedca.Admin
 			adminSANs, claims.Issuer)
 	}
 
+	if strings.HasPrefix(r.URL.Path, "/admin/admins") && (r.Method != "GET") && adm.Type != linkedca.Admin_SUPER_ADMIN {
+		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType, "must have super admin access to make this request")
+	}
+
 	return adm, nil
 }
 
@@ -122,12 +126,7 @@ func (h *Handler) extractAuthorizeTokenAdmin(next nextHTTP) nextHTTP {
 			return
 		}
 
-		if strings.HasPrefix(r.URL.Path, "/admin/admins") && (r.Method != "GET") && adm.Type != linkedca.Admin_SUPER_ADMIN {
-			api.WriteError(w, mgmt.NewError(mgmt.ErrorUnauthorizedType, "must have super admin access to make this request"))
-			return
-		}
-
-		ctx = context.WithValue(ctx, tokenContextKey, tok)
+		ctx = context.WithValue(ctx, adminContextKey, adm)
 		next(w, r.WithContext(ctx))
 	}
 }

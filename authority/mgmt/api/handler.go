@@ -52,9 +52,9 @@ func (h *Handler) Route(r api.Router) {
 	r.MethodFunc("DELETE", "/provisioners/{name}", authnz(h.DeleteProvisioner))
 
 	// Admins
-	r.MethodFunc("GET", "/admins/{id}", h.requireAPIEnabled(h.GetAdmin))
-	r.MethodFunc("GET", "/admins", h.requireAPIEnabled(h.GetAdmins))
-	r.MethodFunc("POST", "/admins", h.requireAPIEnabled(h.CreateAdmin))
-	r.MethodFunc("PATCH", "/admins/{id}", h.requireAPIEnabled(h.UpdateAdmin))
-	r.MethodFunc("DELETE", "/admins/{id}", h.requireAPIEnabled(h.DeleteAdmin))
+	r.MethodFunc("GET", "/admins/{id}", authnz(h.GetAdmin))
+	r.MethodFunc("GET", "/admins", authnz(h.GetAdmins))
+	r.MethodFunc("POST", "/admins", authnz(h.CreateAdmin))
+	r.MethodFunc("PATCH", "/admins/{id}", authnz(h.UpdateAdmin))
+	r.MethodFunc("DELETE", "/admins/{id}", authnz(h.DeleteAdmin))
 }
