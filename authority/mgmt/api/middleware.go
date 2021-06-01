@@ -62,6 +62,11 @@ func (h *Handler) authorizeToken(r *http.Request, token string) (*linkedca.Admin
 		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType, "adminHandler.authorizeToken; unable to load provisioner from x5c certificate")
 	}
 
+	// Check that the token has not been used.
+	if err = h.auth.UseToken(token, prov); err != nil {
+		return nil, mgmt.WrapError(mgmt.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error with reuse token")
+	}
+
 	// According to "rfc7519 JSON Web Token" acceptable skew should be no
 	// more than a few minutes.
 	if err = claims.ValidateWithLeeway(jose.Expected{

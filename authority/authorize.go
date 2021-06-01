@@ -73,23 +73,31 @@ func (a *Authority) authorizeToken(ctx context.Context, token string) (provision
 	// Store the token to protect against reuse unless it's skipped.
 	// If we cannot get a token id from the provisioner, just hash the token.
 	if !SkipTokenReuseFromContext(ctx) {
-		if reuseKey, err := p.GetTokenID(token); err == nil {
-			if reuseKey == "" {
-				sum := sha256.Sum256([]byte(token))
-				reuseKey = strings.ToLower(hex.EncodeToString(sum[:]))
-			}
-			ok, err := a.db.UseToken(reuseKey, token)
-			if err != nil {
-				return nil, errs.Wrap(http.StatusInternalServerError, err,
-					"authority.authorizeToken: failed when attempting to store token")
-			}
-			if !ok {
-				return nil, errs.Unauthorized("authority.authorizeToken: token already used")
-			}
+		if err = a.UseToken(token, p); err != nil {
+			return nil, err
 		}
 	}
 
 	return p, nil
+}
+
+// UseToken stores the token to protect against reuse.
+func (a *Authority) UseToken(token string, prov provisioner.Interface) error {
+	if reuseKey, err := prov.GetTokenID(token); err == nil {
+		if reuseKey == "" {
+			sum := sha256.Sum256([]byte(token))
+			reuseKey = strings.ToLower(hex.EncodeToString(sum[:]))
+		}
+		ok, err := a.db.UseToken(reuseKey, token)
+		if err != nil {
+			return errs.Wrap(http.StatusInternalServerError, err,
+				"authority.authorizeToken: failed when attempting to store token")
+		}
+		if !ok {
+			return errs.Unauthorized("authority.authorizeToken: token already used")
+		}
+	}
+	return nil
 }
 
 // Authorize grabs the method from the context and authorizes the request by
