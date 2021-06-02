@@ -41,7 +41,7 @@ var (
 	// DefaultEnableSSHCA enable SSH CA features per provisioner or globally
 	// for all provisioners.
 	DefaultEnableSSHCA = false
-	// GlobalProvisionerClaims default claims for the Authority. Can be overriden
+	// GlobalProvisionerClaims default claims for the Authority. Can be overridden
 	// by provisioner specific claims.
 	GlobalProvisionerClaims = provisioner.Claims{
 		MinTLSDur:         &provisioner.Duration{Duration: 5 * time.Minute}, // TLS certs
@@ -102,6 +102,7 @@ type AuthConfig struct {
 	Claims               *provisioner.Claims   `json:"claims,omitempty"`
 	DisableIssuedAtCheck bool                  `json:"disableIssuedAtCheck,omitempty"`
 	Backdate             *provisioner.Duration `json:"backdate,omitempty"`
+	UseAdmin             bool                  `json:"useAdmin,omitempty"`
 }
 
 // init initializes the required fields in the AuthConfig if they are not

@@ -2,22 +2,11 @@ package api
 
 import (
 	"crypto/x509"
-	"time"
 
 	"github.com/smallstep/certificates/api"
 	"github.com/smallstep/certificates/authority"
 	"github.com/smallstep/certificates/authority/mgmt"
 )
-
-// Clock that returns time in UTC rounded to seconds.
-type Clock struct{}
-
-// Now returns the UTC time rounded to seconds.
-func (c *Clock) Now() time.Time {
-	return time.Now().UTC().Truncate(time.Second)
-}
-
-var clock Clock
 
 // Handler is the ACME API request handler.
 type Handler struct {

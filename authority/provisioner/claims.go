@@ -7,12 +7,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-type _Claims struct {
-	*X509Claims    `json:"x509Claims"`
-	*SSHClaims     `json:"sshClaims"`
-	DisableRenewal *bool `json:"disableRenewal"`
-}
-
 type X509Claims struct {
 	Durations *Durations `json:"durations"`
 }

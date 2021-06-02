@@ -70,8 +70,6 @@ func (db *DB) save(ctx context.Context, id string, nu interface{}, old interface
 	}
 }
 
-var idLen = 32
-
 func randID() (val string, err error) {
 	val, err = randutil.UUIDv4()
 	if err != nil {

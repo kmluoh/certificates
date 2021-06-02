@@ -238,7 +238,6 @@ func (c *AdminClient) GetAdmins(opts ...AdminOption) ([]*linkedca.Admin, error) 
 		}
 		cursor = resp.NextCursor
 	}
-	return admins, nil
 }
 
 // CreateAdmin performs the POST /admin/admins request to the CA.
@@ -443,7 +442,6 @@ func (c *AdminClient) GetProvisioners(opts ...AdminOption) (provisioner.List, er
 		}
 		cursor = resp.NextCursor
 	}
-	return provs, nil
 }
 
 // RemoveProvisioner performs the DELETE /admin/provisioners/{name} request to the CA.

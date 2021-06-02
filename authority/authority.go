@@ -210,7 +210,7 @@ func (a *Authority) init() error {
 		}
 	}
 
-	if len(a.config.AuthorityConfig.Provisioners) == 0 {
+	if a.config.AuthorityConfig.UseAdmin {
 		// Initialize step-ca Admin Database if it's not already initialized using
 		// WithAdminDB.
 		if a.adminDB == nil {

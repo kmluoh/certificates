@@ -114,8 +114,6 @@ func (h *Handler) authorizeToken(r *http.Request, token string) (*linkedca.Admin
 // extractAuthorizeTokenAdmin is a middleware that extracts and caches the bearer token.
 func (h *Handler) extractAuthorizeTokenAdmin(next nextHTTP) nextHTTP {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		tok := r.Header.Get("Authorization")
 		if len(tok) == 0 {
 			api.WriteError(w, mgmt.NewError(mgmt.ErrorUnauthorizedType,
@@ -123,15 +121,13 @@ func (h *Handler) extractAuthorizeTokenAdmin(next nextHTTP) nextHTTP {
 			return
 		}
 
-		ctx = context.WithValue(r.Context(), tokenContextKey, tok)
-
 		adm, err := h.authorizeToken(r, tok)
 		if err != nil {
 			api.WriteError(w, err)
 			return
 		}
 
-		ctx = context.WithValue(ctx, adminContextKey, adm)
+		ctx := context.WithValue(r.Context(), adminContextKey, adm)
 		next(w, r.WithContext(ctx))
 	}
 }
@@ -141,22 +137,11 @@ func (h *Handler) extractAuthorizeTokenAdmin(next nextHTTP) nextHTTP {
 type ContextKey string
 
 const (
-	// tokenContextKey account key
-	tokenContextKey = ContextKey("token")
 	// adminContextKey account key
 	adminContextKey = ContextKey("admin")
 )
 
-// tokenFromContext searches the context for the token. Returns the
-// token or an error.
-func tokenFromContext(ctx context.Context) (string, error) {
-	val, ok := ctx.Value(tokenContextKey).(string)
-	if !ok || val == "" {
-		return "", mgmt.NewErrorISE("token not in context")
-	}
-	return val, nil
-}
-
+/*
 // adminFromContext searches the context for the token. Returns the
 // token or an error.
 func adminFromContext(ctx context.Context) (*linkedca.Admin, error) {
@@ -166,3 +151,4 @@ func adminFromContext(ctx context.Context) (*linkedca.Admin, error) {
 	}
 	return val, nil
 }
+*/

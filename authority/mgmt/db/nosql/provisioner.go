@@ -28,11 +28,6 @@ type dbProvisioner struct {
 	DeletedAt        time.Time        `json:"deletedAt"`
 }
 
-type provisionerNameID struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
-}
-
 func (dbp *dbProvisioner) clone() *dbProvisioner {
 	u := *dbp
 	return &u

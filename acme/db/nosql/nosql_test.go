@@ -6,6 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/smallstep/assert"
+	"github.com/smallstep/certificates/authority/mgmt"
 	"github.com/smallstep/certificates/db"
 	"github.com/smallstep/nosql"
 )
@@ -35,7 +36,7 @@ func TestNew(t *testing.T) {
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			if _, err := New(tc.db); err != nil {
+			if _, err := New(tc.db, mgmt.DefaultAuthorityID); err != nil {
 				if assert.NotNil(t, tc.err) {
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
 				}
