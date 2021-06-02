@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/smallstep/certificates/authority/mgmt"
+	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/linkedca"
 	"github.com/smallstep/nosql"
 )
@@ -30,7 +30,7 @@ func (dbp *dbAdmin) clone() *dbAdmin {
 func (db *DB) getDBAdminBytes(ctx context.Context, id string) ([]byte, error) {
 	data, err := db.db.Get(authorityAdminsTable, []byte(id))
 	if nosql.IsErrNotFound(err) {
-		return nil, mgmt.NewError(mgmt.ErrorNotFoundType, "admin %s not found", id)
+		return nil, admin.NewError(admin.ErrorNotFoundType, "admin %s not found", id)
 	} else if err != nil {
 		return nil, errors.Wrapf(err, "error loading admin %s", id)
 	}
@@ -47,7 +47,7 @@ func (db *DB) getDBAdmin(ctx context.Context, id string) (*dbAdmin, error) {
 		return nil, err
 	}
 	if dba.AuthorityID != db.authorityID {
-		return nil, mgmt.NewError(mgmt.ErrorAuthorityMismatchType,
+		return nil, admin.NewError(admin.ErrorAuthorityMismatchType,
 			"admin %s is not owned by authority %s", dba.ID, db.authorityID)
 	}
 	return dba, nil
@@ -59,7 +59,7 @@ func unmarshalDBAdmin(data []byte, id string) (*dbAdmin, error) {
 		return nil, errors.Wrapf(err, "error unmarshaling admin %s into dbAdmin", id)
 	}
 	if !dba.DeletedAt.IsZero() {
-		return nil, mgmt.NewError(mgmt.ErrorDeletedType, "admin %s is deleted", id)
+		return nil, admin.NewError(admin.ErrorDeletedType, "admin %s is deleted", id)
 	}
 	return dba, nil
 }
@@ -89,7 +89,7 @@ func (db *DB) GetAdmin(ctx context.Context, id string) (*linkedca.Admin, error) 
 		return nil, err
 	}
 	if adm.AuthorityId != db.authorityID {
-		return nil, mgmt.NewError(mgmt.ErrorAuthorityMismatchType,
+		return nil, admin.NewError(admin.ErrorAuthorityMismatchType,
 			"admin %s is not owned by authority %s", adm.Id, db.authorityID)
 	}
 
@@ -109,8 +109,8 @@ func (db *DB) GetAdmins(ctx context.Context) ([]*linkedca.Admin, error) {
 		adm, err := unmarshalAdmin(entry.Value, string(entry.Key))
 		if err != nil {
 			switch k := err.(type) {
-			case *mgmt.Error:
-				if k.IsType(mgmt.ErrorDeletedType) {
+			case *admin.Error:
+				if k.IsType(admin.ErrorDeletedType) {
 					continue
 				} else {
 					return nil, err
@@ -132,7 +132,7 @@ func (db *DB) CreateAdmin(ctx context.Context, adm *linkedca.Admin) error {
 	var err error
 	adm.Id, err = randID()
 	if err != nil {
-		return mgmt.WrapErrorISE(err, "error generating random id for admin")
+		return admin.WrapErrorISE(err, "error generating random id for admin")
 	}
 	adm.AuthorityId = db.authorityID
 

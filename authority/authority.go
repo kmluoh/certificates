@@ -16,9 +16,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/smallstep/certificates/authority/admin"
+	adminDBNosql "github.com/smallstep/certificates/authority/admin/db/nosql"
+	"github.com/smallstep/certificates/authority/administrator"
 	"github.com/smallstep/certificates/authority/config"
-	"github.com/smallstep/certificates/authority/mgmt"
-	authMgmtNosql "github.com/smallstep/certificates/authority/mgmt/db/nosql"
 	"github.com/smallstep/certificates/authority/provisioner"
 	casapi "github.com/smallstep/certificates/cas/apiv1"
 	"github.com/smallstep/certificates/db"
@@ -36,9 +36,9 @@ type Authority struct {
 	config       *config.Config
 	keyManager   kms.KeyManager
 	provisioners *provisioner.Collection
-	admins       *admin.Collection
+	admins       *administrator.Collection
 	db           db.AuthDB
-	adminDB      mgmt.DB
+	adminDB      admin.DB
 	templates    *templates.Templates
 
 	// X509 CA
@@ -138,15 +138,15 @@ func NewEmbedded(opts ...Option) (*Authority, error) {
 func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
 	provs, err := a.adminDB.GetProvisioners(ctx)
 	if err != nil {
-		return mgmt.WrapErrorISE(err, "error getting provisioners to initialize authority")
+		return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
 	}
 	a.config.AuthorityConfig.Provisioners, err = provisionerListToCertificates(provs)
 	if err != nil {
-		return mgmt.WrapErrorISE(err, "error converting provisioner list to certificates")
+		return admin.WrapErrorISE(err, "error converting provisioner list to certificates")
 	}
 	a.config.AuthorityConfig.Admins, err = a.adminDB.GetAdmins(ctx)
 	if err != nil {
-		return mgmt.WrapErrorISE(err, "error getting admins to initialize authority")
+		return admin.WrapErrorISE(err, "error getting admins to initialize authority")
 	}
 
 	// Merge global and configuration claims
@@ -184,7 +184,7 @@ func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
 		}
 	}
 	// Store all the admins
-	a.admins = admin.NewCollection(a.provisioners)
+	a.admins = administrator.NewCollection(a.provisioners)
 	for _, adm := range a.config.AuthorityConfig.Admins {
 		if err := a.admins.Store(adm); err != nil {
 			return err
@@ -215,7 +215,7 @@ func (a *Authority) init() error {
 		// WithAdminDB.
 		if a.adminDB == nil {
 			// Check if AuthConfig already exists
-			a.adminDB, err = authMgmtNosql.New(a.db.(nosql.DB), mgmt.DefaultAuthorityID)
+			a.adminDB, err = adminDBNosql.New(a.db.(nosql.DB), admin.DefaultAuthorityID)
 			if err != nil {
 				return err
 			}
@@ -223,17 +223,17 @@ func (a *Authority) init() error {
 
 		provs, err := a.adminDB.GetProvisioners(context.Background())
 		if err != nil {
-			return mgmt.WrapErrorISE(err, "error getting provisioners to initialize authority")
+			return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
 		}
 		if len(provs) == 0 {
 			// Create First Provisioner
-			prov, err := mgmt.CreateFirstProvisioner(context.Background(), a.adminDB, a.config.Password)
+			prov, err := admin.CreateFirstProvisioner(context.Background(), a.adminDB, a.config.Password)
 			if err != nil {
-				return mgmt.WrapErrorISE(err, "error creating first provisioner")
+				return admin.WrapErrorISE(err, "error creating first provisioner")
 			}
 			certProv, err := ProvisionerToCertificates(prov)
 			if err != nil {
-				return mgmt.WrapErrorISE(err, "error converting provisioner to certificates type")
+				return admin.WrapErrorISE(err, "error converting provisioner to certificates type")
 			}
 			a.config.AuthorityConfig.Provisioners = []provisioner.Interface{certProv}
 
@@ -245,17 +245,17 @@ func (a *Authority) init() error {
 			}
 			if err := a.adminDB.CreateAdmin(context.Background(), adm); err != nil {
 				// TODO should we try to clean up?
-				return mgmt.WrapErrorISE(err, "error creating first admin")
+				return admin.WrapErrorISE(err, "error creating first admin")
 			}
 			a.config.AuthorityConfig.Admins = []*linkedca.Admin{adm}
 		} else {
 			a.config.AuthorityConfig.Provisioners, err = provisionerListToCertificates(provs)
 			if err != nil {
-				return mgmt.WrapErrorISE(err, "error converting provisioner list to certificates type")
+				return admin.WrapErrorISE(err, "error converting provisioner list to certificates type")
 			}
 			a.config.AuthorityConfig.Admins, err = a.adminDB.GetAdmins(context.Background())
 			if err != nil {
-				return mgmt.WrapErrorISE(err, "error getting provisioners to initialize authority")
+				return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
 			}
 		}
 	}
@@ -509,7 +509,7 @@ func (a *Authority) init() error {
 		}
 	}
 	// Store all the admins
-	a.admins = admin.NewCollection(a.provisioners)
+	a.admins = administrator.NewCollection(a.provisioners)
 	for _, adm := range a.config.AuthorityConfig.Admins {
 		if err := a.admins.Store(adm); err != nil {
 			return err
@@ -548,13 +548,13 @@ func (a *Authority) GetDatabase() db.AuthDB {
 	return a.db
 }
 
-// GetAdminDatabase returns the mgmt database, if one exists.
-func (a *Authority) GetAdminDatabase() mgmt.DB {
+// GetAdminDatabase returns the admin database, if one exists.
+func (a *Authority) GetAdminDatabase() admin.DB {
 	return a.adminDB
 }
 
 // GetAdminCollection returns the admin collection.
-func (a *Authority) GetAdminCollection() *admin.Collection {
+func (a *Authority) GetAdminCollection() *administrator.Collection {
 	return a.admins
 }
 

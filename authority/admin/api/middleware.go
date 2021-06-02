@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/smallstep/certificates/api"
-	"github.com/smallstep/certificates/authority/mgmt"
+	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/linkedca"
 	"go.step.sm/crypto/jose"
 )
@@ -20,7 +20,7 @@ type nextHTTP = func(http.ResponseWriter, *http.Request)
 func (h *Handler) requireAPIEnabled(next nextHTTP) nextHTTP {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.db == nil {
-			api.WriteError(w, mgmt.NewError(mgmt.ErrorNotImplementedType,
+			api.WriteError(w, admin.NewError(admin.ErrorNotImplementedType,
 				"administration API not enabled"))
 			return
 		}
@@ -31,20 +31,20 @@ func (h *Handler) requireAPIEnabled(next nextHTTP) nextHTTP {
 func (h *Handler) authorizeToken(r *http.Request, token string) (*linkedca.Admin, error) {
 	jwt, err := jose.ParseSigned(token)
 	if err != nil {
-		return nil, mgmt.WrapError(mgmt.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error parsing x5c token")
+		return nil, admin.WrapError(admin.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error parsing x5c token")
 	}
 
 	verifiedChains, err := jwt.Headers[0].Certificates(x509.VerifyOptions{
 		Roots: h.rootPool,
 	})
 	if err != nil {
-		return nil, mgmt.WrapError(mgmt.ErrorUnauthorizedType, err,
+		return nil, admin.WrapError(admin.ErrorUnauthorizedType, err,
 			"adminHandler.authorizeToken; error verifying x5c certificate chain in token")
 	}
 	leaf := verifiedChains[0][0]
 
 	if leaf.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
-		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType, "adminHandler.authorizeToken; certificate used to sign x5c token cannot be used for digital signature")
+		return nil, admin.NewError(admin.ErrorUnauthorizedType, "adminHandler.authorizeToken; certificate used to sign x5c token cannot be used for digital signature")
 	}
 
 	// Using the leaf certificates key to validate the claims accomplishes two
@@ -54,17 +54,17 @@ func (h *Handler) authorizeToken(r *http.Request, token string) (*linkedca.Admin
 	//   2. Asserts that the claims are valid - have not been tampered with.
 	var claims jose.Claims
 	if err = jwt.Claims(leaf.PublicKey, &claims); err != nil {
-		return nil, mgmt.WrapError(mgmt.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error parsing x5c claims")
+		return nil, admin.WrapError(admin.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error parsing x5c claims")
 	}
 
 	prov, ok := h.auth.GetProvisionerCollection().LoadByCertificate(leaf)
 	if !ok {
-		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType, "adminHandler.authorizeToken; unable to load provisioner from x5c certificate")
+		return nil, admin.NewError(admin.ErrorUnauthorizedType, "adminHandler.authorizeToken; unable to load provisioner from x5c certificate")
 	}
 
 	// Check that the token has not been used.
 	if err = h.auth.UseToken(token, prov); err != nil {
-		return nil, mgmt.WrapError(mgmt.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error with reuse token")
+		return nil, admin.WrapError(admin.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error with reuse token")
 	}
 
 	// According to "rfc7519 JSON Web Token" acceptable skew should be no
@@ -73,18 +73,18 @@ func (h *Handler) authorizeToken(r *http.Request, token string) (*linkedca.Admin
 		Issuer: prov.GetName(),
 		Time:   time.Now().UTC(),
 	}, time.Minute); err != nil {
-		return nil, mgmt.WrapError(mgmt.ErrorUnauthorizedType, err, "x5c.authorizeToken; invalid x5c claims")
+		return nil, admin.WrapError(admin.ErrorUnauthorizedType, err, "x5c.authorizeToken; invalid x5c claims")
 	}
 
 	// validate audience: path matches the current path
 	if r.URL.Path != claims.Audience[0] {
-		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType,
+		return nil, admin.NewError(admin.ErrorUnauthorizedType,
 			"x5c.authorizeToken; x5c token has invalid audience "+
 				"claim (aud); expected %s, but got %s", r.URL.Path, claims.Audience)
 	}
 
 	if claims.Subject == "" {
-		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType,
+		return nil, admin.NewError(admin.ErrorUnauthorizedType,
 			"x5c.authorizeToken; x5c token subject cannot be empty")
 	}
 
@@ -99,13 +99,13 @@ func (h *Handler) authorizeToken(r *http.Request, token string) (*linkedca.Admin
 		}
 	}
 	if !adminFound {
-		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType,
+		return nil, admin.NewError(admin.ErrorUnauthorizedType,
 			"adminHandler.authorizeToken; unable to load admin with subject(s) %s and provisioner %s",
 			adminSANs, claims.Issuer)
 	}
 
 	if strings.HasPrefix(r.URL.Path, "/admin/admins") && (r.Method != "GET") && adm.Type != linkedca.Admin_SUPER_ADMIN {
-		return nil, mgmt.NewError(mgmt.ErrorUnauthorizedType, "must have super admin access to make this request")
+		return nil, admin.NewError(admin.ErrorUnauthorizedType, "must have super admin access to make this request")
 	}
 
 	return adm, nil
@@ -116,7 +116,7 @@ func (h *Handler) extractAuthorizeTokenAdmin(next nextHTTP) nextHTTP {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tok := r.Header.Get("Authorization")
 		if len(tok) == 0 {
-			api.WriteError(w, mgmt.NewError(mgmt.ErrorUnauthorizedType,
+			api.WriteError(w, admin.NewError(admin.ErrorUnauthorizedType,
 				"missing authorization header token"))
 			return
 		}
@@ -147,7 +147,7 @@ const (
 func adminFromContext(ctx context.Context) (*linkedca.Admin, error) {
 	val, ok := ctx.Value(adminContextKey).(*linkedca.Admin)
 	if !ok || val == nil {
-		return nil, mgmt.NewErrorISE("admin not in context")
+		return nil, admin.NewErrorISE("admin not in context")
 	}
 	return val, nil
 }

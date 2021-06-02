@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/smallstep/certificates/authority/mgmt"
+	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/linkedca"
 	"github.com/smallstep/nosql"
 )
@@ -36,7 +36,7 @@ func (dbp *dbProvisioner) clone() *dbProvisioner {
 func (db *DB) getDBProvisionerBytes(ctx context.Context, id string) ([]byte, error) {
 	data, err := db.db.Get(authorityProvisionersTable, []byte(id))
 	if nosql.IsErrNotFound(err) {
-		return nil, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", id)
+		return nil, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id)
 	} else if err != nil {
 		return nil, errors.Wrapf(err, "error loading provisioner %s", id)
 	}
@@ -53,10 +53,10 @@ func (db *DB) getDBProvisioner(ctx context.Context, id string) (*dbProvisioner, 
 		return nil, err
 	}
 	if !dbp.DeletedAt.IsZero() {
-		return nil, mgmt.NewError(mgmt.ErrorDeletedType, "provisioner %s is deleted", id)
+		return nil, admin.NewError(admin.ErrorDeletedType, "provisioner %s is deleted", id)
 	}
 	if dbp.AuthorityID != db.authorityID {
-		return nil, mgmt.NewError(mgmt.ErrorAuthorityMismatchType,
+		return nil, admin.NewError(admin.ErrorAuthorityMismatchType,
 			"provisioner %s is not owned by authority %s", dbp.ID, db.authorityID)
 	}
 	return dbp, nil
@@ -74,7 +74,7 @@ func (db *DB) GetProvisioner(ctx context.Context, id string) (*linkedca.Provisio
 		return nil, err
 	}
 	if prov.AuthorityId != db.authorityID {
-		return nil, mgmt.NewError(mgmt.ErrorAuthorityMismatchType,
+		return nil, admin.NewError(admin.ErrorAuthorityMismatchType,
 			"provisioner %s is not owned by authority %s", prov.Id, db.authorityID)
 	}
 	return prov, nil
@@ -86,7 +86,7 @@ func unmarshalDBProvisioner(data []byte, name string) (*dbProvisioner, error) {
 		return nil, errors.Wrapf(err, "error unmarshaling provisioner %s into dbProvisioner", name)
 	}
 	if !dbp.DeletedAt.IsZero() {
-		return nil, mgmt.NewError(mgmt.ErrorDeletedType, "provisioner %s is deleted", name)
+		return nil, admin.NewError(admin.ErrorDeletedType, "provisioner %s is deleted", name)
 	}
 	return dbp, nil
 }
@@ -122,15 +122,15 @@ func unmarshalProvisioner(data []byte, name string) (*linkedca.Provisioner, erro
 func (db *DB) GetProvisioners(ctx context.Context) ([]*linkedca.Provisioner, error) {
 	dbEntries, err := db.db.List(authorityProvisionersTable)
 	if err != nil {
-		return nil, mgmt.WrapErrorISE(err, "error loading provisioners")
+		return nil, admin.WrapErrorISE(err, "error loading provisioners")
 	}
 	var provs []*linkedca.Provisioner
 	for _, entry := range dbEntries {
 		prov, err := unmarshalProvisioner(entry.Value, string(entry.Key))
 		if err != nil {
 			switch k := err.(type) {
-			case *mgmt.Error:
-				if k.IsType(mgmt.ErrorDeletedType) {
+			case *admin.Error:
+				if k.IsType(admin.ErrorDeletedType) {
 					continue
 				} else {
 					return nil, err
@@ -157,7 +157,7 @@ func (db *DB) CreateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 
 	details, err := json.Marshal(prov.Details.GetData())
 	if err != nil {
-		return mgmt.WrapErrorISE(err, "error marshaling details when creating provisioner %s", prov.Name)
+		return admin.WrapErrorISE(err, "error marshaling details when creating provisioner %s", prov.Name)
 	}
 
 	dbp := &dbProvisioner{
@@ -175,7 +175,7 @@ func (db *DB) CreateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 	}
 
 	if err := db.save(ctx, prov.Id, dbp, nil, "provisioner", authorityProvisionersTable); err != nil {
-		return mgmt.WrapErrorISE(err, "error creating provisioner %s", prov.Name)
+		return admin.WrapErrorISE(err, "error creating provisioner %s", prov.Name)
 	}
 
 	return nil
@@ -195,7 +195,7 @@ func (db *DB) UpdateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 	nu.Claims = prov.Claims
 	nu.Details, err = json.Marshal(prov.Details)
 	if err != nil {
-		return mgmt.WrapErrorISE(err, "error marshaling details when updating provisioner %s", prov.Name)
+		return admin.WrapErrorISE(err, "error marshaling details when updating provisioner %s", prov.Name)
 	}
 	nu.X509Template = prov.X509Template
 	nu.X509TemplateData = prov.X509TemplateData
@@ -203,7 +203,7 @@ func (db *DB) UpdateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 	nu.SSHTemplateData = prov.SshTemplateData
 
 	if err := db.save(ctx, prov.Id, nu, old, "provisioner", authorityProvisionersTable); err != nil {
-		return mgmt.WrapErrorISE(err, "error updating provisioner %s", prov.Name)
+		return admin.WrapErrorISE(err, "error updating provisioner %s", prov.Name)
 	}
 
 	return nil

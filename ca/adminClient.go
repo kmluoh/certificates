@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/smallstep/certificates/authority/mgmt"
-	mgmtAPI "github.com/smallstep/certificates/authority/mgmt/api"
+	"github.com/smallstep/certificates/authority/admin"
+	adminAPI "github.com/smallstep/certificates/authority/admin/api"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
 	"github.com/smallstep/certificates/linkedca"
@@ -183,7 +183,7 @@ func WithAdminLimit(limit int) AdminOption {
 }
 
 // GetAdminsPaginate returns a page from the the GET /admin/admins request to the CA.
-func (c *AdminClient) GetAdminsPaginate(opts ...AdminOption) (*mgmtAPI.GetAdminsResponse, error) {
+func (c *AdminClient) GetAdminsPaginate(opts ...AdminOption) (*adminAPI.GetAdminsResponse, error) {
 	var retried bool
 	o := new(adminOptions)
 	if err := o.apply(opts); err != nil {
@@ -214,7 +214,7 @@ retry:
 		}
 		return nil, readAdminError(resp.Body)
 	}
-	var body = new(mgmtAPI.GetAdminsResponse)
+	var body = new(adminAPI.GetAdminsResponse)
 	if err := readJSON(resp.Body, body); err != nil {
 		return nil, errors.Wrapf(err, "error reading %s", u)
 	}
@@ -241,7 +241,7 @@ func (c *AdminClient) GetAdmins(opts ...AdminOption) ([]*linkedca.Admin, error) 
 }
 
 // CreateAdmin performs the POST /admin/admins request to the CA.
-func (c *AdminClient) CreateAdmin(createAdminRequest *mgmtAPI.CreateAdminRequest) (*linkedca.Admin, error) {
+func (c *AdminClient) CreateAdmin(createAdminRequest *adminAPI.CreateAdminRequest) (*linkedca.Admin, error) {
 	var retried bool
 	body, err := json.Marshal(createAdminRequest)
 	if err != nil {
@@ -305,7 +305,7 @@ retry:
 }
 
 // UpdateAdmin performs the PUT /admin/admins/{id} request to the CA.
-func (c *AdminClient) UpdateAdmin(id string, uar *mgmtAPI.UpdateAdminRequest) (*linkedca.Admin, error) {
+func (c *AdminClient) UpdateAdmin(id string, uar *adminAPI.UpdateAdminRequest) (*linkedca.Admin, error) {
 	var retried bool
 	body, err := json.Marshal(uar)
 	if err != nil {
@@ -387,7 +387,7 @@ retry:
 }
 
 // GetProvisionersPaginate performs the GET /admin/provisioners request to the CA.
-func (c *AdminClient) GetProvisionersPaginate(opts ...ProvisionerOption) (*mgmtAPI.GetProvisionersResponse, error) {
+func (c *AdminClient) GetProvisionersPaginate(opts ...ProvisionerOption) (*adminAPI.GetProvisionersResponse, error) {
 	var retried bool
 	o := new(provisionerOptions)
 	if err := o.apply(opts); err != nil {
@@ -418,7 +418,7 @@ retry:
 		}
 		return nil, readAdminError(resp.Body)
 	}
-	var body = new(mgmtAPI.GetProvisionersResponse)
+	var body = new(adminAPI.GetProvisionersResponse)
 	if err := readJSON(resp.Body, body); err != nil {
 		return nil, errors.Wrapf(err, "error reading %s", u)
 	}
@@ -527,7 +527,7 @@ retry:
 }
 
 // UpdateProvisioner performs the PUT /admin/provisioners/{id} request to the CA.
-func (c *AdminClient) UpdateProvisioner(id string, upr *mgmtAPI.UpdateProvisionerRequest) (*linkedca.Provisioner, error) {
+func (c *AdminClient) UpdateProvisioner(id string, upr *adminAPI.UpdateProvisionerRequest) (*linkedca.Provisioner, error) {
 	var retried bool
 	body, err := json.Marshal(upr)
 	if err != nil {
@@ -564,9 +564,9 @@ retry:
 
 func readAdminError(r io.ReadCloser) error {
 	defer r.Close()
-	mgmtErr := new(mgmt.Error)
-	if err := json.NewDecoder(r).Decode(mgmtErr); err != nil {
+	adminErr := new(admin.Error)
+	if err := json.NewDecoder(r).Decode(adminErr); err != nil {
 		return err
 	}
-	return errors.New(mgmtErr.Message)
+	return errors.New(adminErr.Message)
 }

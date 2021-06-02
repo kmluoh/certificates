@@ -5,12 +5,12 @@ import (
 
 	"github.com/smallstep/certificates/api"
 	"github.com/smallstep/certificates/authority"
-	"github.com/smallstep/certificates/authority/mgmt"
+	"github.com/smallstep/certificates/authority/admin"
 )
 
 // Handler is the ACME API request handler.
 type Handler struct {
-	db       mgmt.DB
+	db       admin.DB
 	auth     *authority.Authority
 	rootPool *x509.CertPool
 }

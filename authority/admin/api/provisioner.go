@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/smallstep/certificates/api"
 	"github.com/smallstep/certificates/authority"
-	"github.com/smallstep/certificates/authority/mgmt"
+	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
 	"github.com/smallstep/certificates/linkedca"
@@ -34,7 +34,7 @@ type UpdateProvisionerRequest struct {
 // Validate validates a update-provisioner request body.
 func (upr *UpdateProvisionerRequest) Validate(c *provisioner.Collection) error {
 	if _, ok := c.LoadByName(upr.Name); ok {
-		return mgmt.NewError(mgmt.ErrorBadRequestType, "provisioner with name %s already exists", upr.Name)
+		return admin.NewError(admin.ErrorBadRequestType, "provisioner with name %s already exists", upr.Name)
 	}
 	return nil
 }
@@ -52,12 +52,12 @@ func (h *Handler) GetProvisioner(w http.ResponseWriter, r *http.Request) {
 	)
 	if len(id) > 0 {
 		if p, ok = h.auth.GetProvisionerCollection().Load(id); !ok {
-			api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", name))
+			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", name))
 			return
 		}
 	} else {
 		if p, ok = h.auth.GetProvisionerCollection().LoadByName(name); !ok {
-			api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", id))
+			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id))
 			return
 		}
 	}
@@ -74,7 +74,7 @@ func (h *Handler) GetProvisioner(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProvisioners(w http.ResponseWriter, r *http.Request) {
 	cursor, limit, err := api.ParseCursor(r)
 	if err != nil {
-		api.WriteError(w, mgmt.WrapError(mgmt.ErrorBadRequestType, err,
+		api.WriteError(w, admin.WrapError(admin.ErrorBadRequestType, err,
 			"error parsing cursor / limt query params"))
 		return
 	}
@@ -103,23 +103,23 @@ func (h *Handler) CreateProvisioner(w http.ResponseWriter, r *http.Request) {
 	// TODO: validate
 	clxn := h.auth.GetProvisionerCollection()
 	if _, ok := clxn.LoadByName(prov.Name); ok {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorBadRequestType,
+		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType,
 			"provisioner with name %s already exists", prov.Name))
 		return
 	}
 	certProv, err := authority.ProvisionerToCertificates(prov)
 	if err != nil {
-		api.WriteError(w, mgmt.WrapErrorISE(err, "error converting from linkedca provisioner"))
+		api.WriteError(w, admin.WrapErrorISE(err, "error converting from linkedca provisioner"))
 		return
 	}
 	if _, ok := clxn.LoadByTokenID(certProv.GetIDForToken()); ok {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorBadRequestType,
+		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType,
 			"provisioner with token-id %s already exists", certProv.GetIDForToken()))
 		return
 	}
 
 	// TODO: fix this
-	prov.Claims = mgmt.NewDefaultClaims()
+	prov.Claims = admin.NewDefaultClaims()
 
 	if err := h.db.CreateProvisioner(ctx, prov); err != nil {
 		api.WriteError(w, err)
@@ -143,12 +143,12 @@ func (h *Handler) DeleteProvisioner(w http.ResponseWriter, r *http.Request) {
 	)
 	if len(id) > 0 {
 		if p, ok = h.auth.GetProvisionerCollection().Load(id); !ok {
-			api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", id))
+			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id))
 			return
 		}
 	} else {
 		if p, ok = h.auth.GetProvisionerCollection().LoadByName(name); !ok {
-			api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", name))
+			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", name))
 			return
 		}
 	}
@@ -157,14 +157,14 @@ func (h *Handler) DeleteProvisioner(w http.ResponseWriter, r *http.Request) {
 	//  - Check that there are SUPER_ADMINs that aren't associated with this provisioner.
 	c := h.auth.GetAdminCollection()
 	if c.SuperCount() == c.SuperCountByProvisioner(p.GetName()) {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorBadRequestType,
+		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType,
 			"cannot remove provisioner %s because no super admins will remain", name))
 		return
 	}
 
 	ctx := r.Context()
 	if err := h.db.DeleteProvisioner(ctx, p.GetID()); err != nil {
-		api.WriteError(w, mgmt.WrapErrorISE(err, "error deleting provisioner %s", name))
+		api.WriteError(w, admin.WrapErrorISE(err, "error deleting provisioner %s", name))
 		return
 	}
 
@@ -173,7 +173,7 @@ func (h *Handler) DeleteProvisioner(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		for _, adm := range admins {
 			if err := h.db.DeleteAdmin(ctx, adm.Id); err != nil {
-				api.WriteError(w, mgmt.WrapErrorISE(err, "error deleting admin %s, as part of provisioner %s deletion", adm.Subject, name))
+				api.WriteError(w, admin.WrapErrorISE(err, "error deleting admin %s, as part of provisioner %s deletion", adm.Subject, name))
 				return
 			}
 		}

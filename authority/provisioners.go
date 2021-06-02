@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/smallstep/certificates/authority/mgmt"
+	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
 	"github.com/smallstep/certificates/linkedca"
@@ -90,19 +90,19 @@ func claimsToCertificates(c *linkedca.Claims) (*provisioner.Claims, error) {
 			if len(d.Min) > 0 {
 				pc.MinTLSDur, err = provisioner.NewDuration(d.Min)
 				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.minTLSDur: %s", d.Min)
+					return nil, admin.WrapErrorISE(err, "error parsing claims.minTLSDur: %s", d.Min)
 				}
 			}
 			if len(d.Max) > 0 {
 				pc.MaxTLSDur, err = provisioner.NewDuration(d.Max)
 				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.maxTLSDur: %s", d.Max)
+					return nil, admin.WrapErrorISE(err, "error parsing claims.maxTLSDur: %s", d.Max)
 				}
 			}
 			if len(d.Default) > 0 {
 				pc.DefaultTLSDur, err = provisioner.NewDuration(d.Default)
 				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.defaultTLSDur: %s", d.Default)
+					return nil, admin.WrapErrorISE(err, "error parsing claims.defaultTLSDur: %s", d.Default)
 				}
 			}
 		}
@@ -113,19 +113,19 @@ func claimsToCertificates(c *linkedca.Claims) (*provisioner.Claims, error) {
 			if len(d.Min) > 0 {
 				pc.MinUserSSHDur, err = provisioner.NewDuration(d.Min)
 				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.minUserSSHDur: %s", d.Min)
+					return nil, admin.WrapErrorISE(err, "error parsing claims.minUserSSHDur: %s", d.Min)
 				}
 			}
 			if len(d.Max) > 0 {
 				pc.MaxUserSSHDur, err = provisioner.NewDuration(d.Max)
 				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.maxUserSSHDur: %s", d.Max)
+					return nil, admin.WrapErrorISE(err, "error parsing claims.maxUserSSHDur: %s", d.Max)
 				}
 			}
 			if len(d.Default) > 0 {
 				pc.DefaultUserSSHDur, err = provisioner.NewDuration(d.Default)
 				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.defaultUserSSHDur: %s", d.Default)
+					return nil, admin.WrapErrorISE(err, "error parsing claims.defaultUserSSHDur: %s", d.Default)
 				}
 			}
 		}
@@ -133,19 +133,19 @@ func claimsToCertificates(c *linkedca.Claims) (*provisioner.Claims, error) {
 			if len(d.Min) > 0 {
 				pc.MinHostSSHDur, err = provisioner.NewDuration(d.Min)
 				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.minHostSSHDur: %s", d.Min)
+					return nil, admin.WrapErrorISE(err, "error parsing claims.minHostSSHDur: %s", d.Min)
 				}
 			}
 			if len(d.Max) > 0 {
 				pc.MaxUserSSHDur, err = provisioner.NewDuration(d.Max)
 				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.maxHostSSHDur: %s", d.Max)
+					return nil, admin.WrapErrorISE(err, "error parsing claims.maxHostSSHDur: %s", d.Max)
 				}
 			}
 			if len(d.Default) > 0 {
 				pc.DefaultUserSSHDur, err = provisioner.NewDuration(d.Default)
 				if err != nil {
-					return nil, mgmt.WrapErrorISE(err, "error parsing claims.defaultHostSSHDur: %s", d.Default)
+					return nil, admin.WrapErrorISE(err, "error parsing claims.defaultHostSSHDur: %s", d.Default)
 				}
 			}
 		}

@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/smallstep/certificates/api"
 	"github.com/smallstep/certificates/authority/admin"
-	"github.com/smallstep/certificates/authority/mgmt"
+	"github.com/smallstep/certificates/authority/administrator"
 	"github.com/smallstep/certificates/linkedca"
 )
 
@@ -19,9 +19,9 @@ type CreateAdminRequest struct {
 }
 
 // Validate validates a new-admin request body.
-func (car *CreateAdminRequest) Validate(c *admin.Collection) error {
+func (car *CreateAdminRequest) Validate(c *administrator.Collection) error {
 	if _, ok := c.LoadBySubProv(car.Subject, car.Provisioner); ok {
-		return mgmt.NewError(mgmt.ErrorBadRequestType,
+		return admin.NewError(admin.ErrorBadRequestType,
 			"admin with subject: '%s' and provisioner: '%s' already exists", car.Subject, car.Provisioner)
 	}
 	return nil
@@ -54,7 +54,7 @@ func (h *Handler) GetAdmin(w http.ResponseWriter, r *http.Request) {
 
 	adm, ok := h.auth.GetAdminCollection().LoadByID(id)
 	if !ok {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType,
+		api.WriteError(w, admin.NewError(admin.ErrorNotFoundType,
 			"admin %s not found", id))
 		return
 	}
@@ -65,7 +65,7 @@ func (h *Handler) GetAdmin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAdmins(w http.ResponseWriter, r *http.Request) {
 	cursor, limit, err := api.ParseCursor(r)
 	if err != nil {
-		api.WriteError(w, mgmt.WrapError(mgmt.ErrorBadRequestType, err,
+		api.WriteError(w, admin.WrapError(admin.ErrorBadRequestType, err,
 			"error parsing cursor and limit from query params"))
 		return
 	}
@@ -83,7 +83,7 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 
 	var body CreateAdminRequest
 	if err := api.ReadJSON(r.Body, &body); err != nil {
-		api.WriteError(w, mgmt.WrapError(mgmt.ErrorBadRequestType, err, "error reading request body"))
+		api.WriteError(w, admin.WrapError(admin.ErrorBadRequestType, err, "error reading request body"))
 		return
 	}
 
@@ -94,7 +94,7 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 
 	p, ok := h.auth.GetProvisionerCollection().LoadByName(body.Provisioner)
 	if !ok {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "provisioner %s not found", body.Provisioner))
+		api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", body.Provisioner))
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 		Type:          body.Type,
 	}
 	if err := h.db.CreateAdmin(ctx, adm); err != nil {
-		api.WriteError(w, mgmt.WrapErrorISE(err, "error creating admin"))
+		api.WriteError(w, admin.WrapErrorISE(err, "error creating admin"))
 		return
 	}
 	api.JSON(w, adm)
@@ -118,13 +118,13 @@ func (h *Handler) DeleteAdmin(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	if h.auth.GetAdminCollection().SuperCount() == 1 {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorBadRequestType, "cannot remove the last super admin"))
+		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType, "cannot remove the last super admin"))
 		return
 	}
 
 	ctx := r.Context()
 	if err := h.db.DeleteAdmin(ctx, id); err != nil {
-		api.WriteError(w, mgmt.WrapErrorISE(err, "error deleting admin %s", id))
+		api.WriteError(w, admin.WrapErrorISE(err, "error deleting admin %s", id))
 		return
 	}
 	api.JSON(w, &DeleteResponse{Status: "ok"})
@@ -140,7 +140,7 @@ func (h *Handler) UpdateAdmin(w http.ResponseWriter, r *http.Request) {
 
 	var body UpdateAdminRequest
 	if err := api.ReadJSON(r.Body, &body); err != nil {
-		api.WriteError(w, mgmt.WrapError(mgmt.ErrorBadRequestType, err, "error reading request body"))
+		api.WriteError(w, admin.WrapError(admin.ErrorBadRequestType, err, "error reading request body"))
 		return
 	}
 
@@ -148,18 +148,18 @@ func (h *Handler) UpdateAdmin(w http.ResponseWriter, r *http.Request) {
 
 	adm, ok := h.auth.GetAdminCollection().LoadByID(id)
 	if !ok {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorNotFoundType, "admin %s not found", id))
+		api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "admin %s not found", id))
 		return
 	}
 	if adm.Type == body.Type {
-		api.WriteError(w, mgmt.NewError(mgmt.ErrorBadRequestType, "admin %s already has type %s", id, adm.Type))
+		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType, "admin %s already has type %s", id, adm.Type))
 		return
 	}
 
 	adm.Type = body.Type
 
 	if err := h.db.UpdateAdmin(ctx, (*linkedca.Admin)(adm)); err != nil {
-		api.WriteError(w, mgmt.WrapErrorISE(err, "error updating admin %s", id))
+		api.WriteError(w, admin.WrapErrorISE(err, "error updating admin %s", id))
 		return
 	}
 	api.JSON(w, adm)

@@ -1,4 +1,4 @@
-package admin
+package administrator
 
 import (
 	"crypto/sha1"
