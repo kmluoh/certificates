@@ -210,7 +210,7 @@ func (a *Authority) init() error {
 		}
 	}
 
-	if a.config.AuthorityConfig.UseAdmin {
+	if a.config.AuthorityConfig.EnableAdmin {
 		// Initialize step-ca Admin Database if it's not already initialized using
 		// WithAdminDB.
 		if a.adminDB == nil {
