@@ -1,8 +1,6 @@
 package api
 
 import (
-	"crypto/x509"
-
 	"github.com/smallstep/certificates/api"
 	"github.com/smallstep/certificates/authority"
 	"github.com/smallstep/certificates/authority/admin"
@@ -10,19 +8,13 @@ import (
 
 // Handler is the ACME API request handler.
 type Handler struct {
-	db       admin.DB
-	auth     *authority.Authority
-	rootPool *x509.CertPool
+	db   admin.DB
+	auth *authority.Authority
 }
 
 // NewHandler returns a new Authority Config Handler.
 func NewHandler(auth *authority.Authority) api.RouterHandler {
 	h := &Handler{db: auth.GetAdminDatabase(), auth: auth}
-
-	h.rootPool = x509.NewCertPool()
-	for _, cert := range auth.GetRootX509Certs() {
-		h.rootPool.AddCert(cert)
-	}
 
 	return h
 }

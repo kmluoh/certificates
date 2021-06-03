@@ -44,6 +44,7 @@ type Authority struct {
 	// X509 CA
 	x509CAService      cas.CertificateAuthorityService
 	rootX509Certs      []*x509.Certificate
+	rootX509CertPool   *x509.CertPool
 	federatedX509Certs []*x509.Certificate
 	certificates       *sync.Map
 
@@ -329,6 +330,11 @@ func (a *Authority) init() error {
 		a.certificates.Store(hex.EncodeToString(sum[:]), crt)
 	}
 
+	a.rootX509CertPool = x509.NewCertPool()
+	for _, cert := range a.rootX509Certs {
+		a.rootX509CertPool.AddCert(cert)
+	}
+
 	// Read federated certificates and store them in the certificates map.
 	if len(a.federatedX509Certs) == 0 {
 		a.federatedX509Certs = make([]*x509.Certificate, len(a.config.FederatedRoots))
@@ -535,11 +541,6 @@ func (a *Authority) init() error {
 	a.initOnce = true
 
 	return nil
-}
-
-// GetRootX509Certs returns the configured root X509 certificates.
-func (a *Authority) GetRootX509Certs() []*x509.Certificate {
-	return a.rootX509Certs
 }
 
 // GetDatabase returns the authority database. If the configuration does not
