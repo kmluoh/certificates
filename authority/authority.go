@@ -68,6 +68,8 @@ type Authority struct {
 	sshCheckHostFunc func(ctx context.Context, principal string, tok string, roots []*x509.Certificate) (bool, error)
 	sshGetHostsFunc  func(ctx context.Context, cert *x509.Certificate) ([]config.Host, error)
 	getIdentityFunc  provisioner.GetIdentityFunc
+
+	adminMutex sync.RWMutex
 }
 
 // New creates and initiates a new Authority type.
@@ -141,11 +143,11 @@ func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
 	if err != nil {
 		return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
 	}
-	a.config.AuthorityConfig.Provisioners, err = provisionerListToCertificates(provs)
+	provList, err := provisionerListToCertificates(provs)
 	if err != nil {
 		return admin.WrapErrorISE(err, "error converting provisioner list to certificates")
 	}
-	a.config.AuthorityConfig.Admins, err = a.adminDB.GetAdmins(ctx)
+	adminList, err := a.adminDB.GetAdmins(ctx)
 	if err != nil {
 		return admin.WrapErrorISE(err, "error getting admins to initialize authority")
 	}
@@ -164,7 +166,6 @@ func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
 	}
 	// Initialize provisioners
 	audiences := a.config.GetAudiences()
-	a.provisioners = provisioner.NewCollection(audiences)
 	config := provisioner.Config{
 		Claims:    claimer.Claims(),
 		Audiences: audiences,
@@ -175,22 +176,32 @@ func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
 		},
 		GetIdentityFunc: a.getIdentityFunc,
 	}
-	// Store all the provisioners
-	for _, p := range a.config.AuthorityConfig.Provisioners {
+
+	// Create provisioner collection.
+	provClxn := provisioner.NewCollection(audiences)
+	for _, p := range provList {
 		if err := p.Init(config); err != nil {
 			return err
 		}
-		if err := a.provisioners.Store(p); err != nil {
+		if err := provClxn.Store(p); err != nil {
 			return err
 		}
 	}
-	// Store all the admins
-	a.admins = administrator.NewCollection(a.provisioners)
-	for _, adm := range a.config.AuthorityConfig.Admins {
-		if err := a.admins.Store(adm); err != nil {
+	// Create admin collection.
+	adminClxn := administrator.NewCollection(provClxn)
+	for _, adm := range adminList {
+		if err := adminClxn.Store(adm); err != nil {
 			return err
 		}
 	}
+
+	// Make changes to the AuthConfig under mutex.
+	a.adminMutex.Lock()
+	defer a.adminMutex.Unlock()
+	a.config.AuthorityConfig.Provisioners = provList
+	a.provisioners = provClxn
+	a.config.AuthorityConfig.Admins = adminList
+	a.admins = adminClxn
 	return nil
 }
 
@@ -448,19 +459,6 @@ func (a *Authority) init() error {
 	if err != nil {
 		return err
 	}
-	// Initialize provisioners
-	audiences := a.config.GetAudiences()
-	a.provisioners = provisioner.NewCollection(audiences)
-	config := provisioner.Config{
-		Claims:    claimer.Claims(),
-		Audiences: audiences,
-		DB:        a.db,
-		SSHKeys: &provisioner.SSHKeys{
-			UserKeys: sshKeys.UserKeys,
-			HostKeys: sshKeys.HostKeys,
-		},
-		GetIdentityFunc: a.getIdentityFunc,
-	}
 
 	// Check if a KMS with decryption capability is required and available
 	if a.requiresDecrypter() {
@@ -505,7 +503,21 @@ func (a *Authority) init() error {
 		// TODO: mimick the x509CAService GetCertificateAuthority here too?
 	}
 
-	// Store all the provisioners
+	// Initialize provisioners
+	audiences := a.config.GetAudiences()
+	config := provisioner.Config{
+		Claims:    claimer.Claims(),
+		Audiences: audiences,
+		DB:        a.db,
+		SSHKeys: &provisioner.SSHKeys{
+			UserKeys: sshKeys.UserKeys,
+			HostKeys: sshKeys.HostKeys,
+		},
+		GetIdentityFunc: a.getIdentityFunc,
+	}
+
+	// Store all the provisioners in a collection.
+	a.provisioners = provisioner.NewCollection(audiences)
 	for _, p := range a.config.AuthorityConfig.Provisioners {
 		if err := p.Init(config); err != nil {
 			return err
@@ -514,7 +526,7 @@ func (a *Authority) init() error {
 			return err
 		}
 	}
-	// Store all the admins
+	// Store all the admins in a collection.
 	a.admins = administrator.NewCollection(a.provisioners)
 	for _, adm := range a.config.AuthorityConfig.Admins {
 		if err := a.admins.Store(adm); err != nil {
@@ -554,13 +566,17 @@ func (a *Authority) GetAdminDatabase() admin.DB {
 	return a.adminDB
 }
 
-// GetAdminCollection returns the admin collection.
-func (a *Authority) GetAdminCollection() *administrator.Collection {
+// GetAdminClxn returns the admin collection.
+func (a *Authority) GetAdminClxn() *administrator.Collection {
+	a.adminMutex.RLock()
+	defer a.adminMutex.RUnlock()
 	return a.admins
 }
 
-// GetProvisionerCollection returns the admin collection.
-func (a *Authority) GetProvisionerCollection() *provisioner.Collection {
+// GetProvisionerClxn returns the admin collection.
+func (a *Authority) GetProvisionerClxn() *provisioner.Collection {
+	a.adminMutex.RLock()
+	defer a.adminMutex.RUnlock()
 	return a.provisioners
 }
 

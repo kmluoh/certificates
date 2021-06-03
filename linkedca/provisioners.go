@@ -27,6 +27,8 @@ func UnmarshalProvisionerDetails(typ Provisioner_Type, data []byte) (*Provisione
 		v = new(ProvisionerDetails_K8SSA)
 	case Provisioner_SSHPOP:
 		v = new(ProvisionerDetails_SSHPOP)
+	case Provisioner_SCEP:
+		v = new(ProvisionerDetails_SCEP)
 	default:
 		return nil, fmt.Errorf("unsupported provisioner type %s", typ)
 	}

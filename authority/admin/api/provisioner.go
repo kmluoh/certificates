@@ -51,12 +51,12 @@ func (h *Handler) GetProvisioner(w http.ResponseWriter, r *http.Request) {
 		ok bool
 	)
 	if len(id) > 0 {
-		if p, ok = h.auth.GetProvisionerCollection().Load(id); !ok {
+		if p, ok = h.auth.GetProvisionerClxn().Load(id); !ok {
 			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", name))
 			return
 		}
 	} else {
-		if p, ok = h.auth.GetProvisionerCollection().LoadByName(name); !ok {
+		if p, ok = h.auth.GetProvisionerClxn().LoadByName(name); !ok {
 			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id))
 			return
 		}
@@ -101,7 +101,7 @@ func (h *Handler) CreateProvisioner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: validate
-	clxn := h.auth.GetProvisionerCollection()
+	clxn := h.auth.GetProvisionerClxn()
 	if _, ok := clxn.LoadByName(prov.Name); ok {
 		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType,
 			"provisioner with name %s already exists", prov.Name))
@@ -142,12 +142,12 @@ func (h *Handler) DeleteProvisioner(w http.ResponseWriter, r *http.Request) {
 		ok bool
 	)
 	if len(id) > 0 {
-		if p, ok = h.auth.GetProvisionerCollection().Load(id); !ok {
+		if p, ok = h.auth.GetProvisionerClxn().Load(id); !ok {
 			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id))
 			return
 		}
 	} else {
-		if p, ok = h.auth.GetProvisionerCollection().LoadByName(name); !ok {
+		if p, ok = h.auth.GetProvisionerClxn().LoadByName(name); !ok {
 			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", name))
 			return
 		}
@@ -155,7 +155,7 @@ func (h *Handler) DeleteProvisioner(w http.ResponseWriter, r *http.Request) {
 
 	// Validate
 	//  - Check that there are SUPER_ADMINs that aren't associated with this provisioner.
-	c := h.auth.GetAdminCollection()
+	c := h.auth.GetAdminClxn()
 	if c.SuperCount() == c.SuperCountByProvisioner(p.GetName()) {
 		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType,
 			"cannot remove provisioner %s because no super admins will remain", name))

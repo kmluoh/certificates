@@ -92,7 +92,8 @@ func (a *Authority) AuthorizeAdminToken(r *http.Request, token string) (*linkedc
 	}
 
 	verifiedChains, err := jwt.Headers[0].Certificates(x509.VerifyOptions{
-		Roots: a.rootX509CertPool,
+		Roots:     a.rootX509CertPool,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
 		return nil, admin.WrapError(admin.ErrorUnauthorizedType, err,
@@ -114,7 +115,7 @@ func (a *Authority) AuthorizeAdminToken(r *http.Request, token string) (*linkedc
 		return nil, admin.WrapError(admin.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error parsing x5c claims")
 	}
 
-	prov, ok := a.GetProvisionerCollection().LoadByCertificate(leaf)
+	prov, ok := a.GetProvisionerClxn().LoadByCertificate(leaf)
 	if !ok {
 		return nil, admin.NewError(admin.ErrorUnauthorizedType, "adminHandler.authorizeToken; unable to load provisioner from x5c certificate")
 	}
@@ -150,7 +151,7 @@ func (a *Authority) AuthorizeAdminToken(r *http.Request, token string) (*linkedc
 	adminSANs := append([]string{leaf.Subject.CommonName}, leaf.DNSNames...)
 	adminSANs = append(adminSANs, leaf.EmailAddresses...)
 	for _, san := range adminSANs {
-		if adm, ok = a.GetAdminCollection().LoadBySubProv(san, claims.Issuer); ok {
+		if adm, ok = a.GetAdminClxn().LoadBySubProv(san, claims.Issuer); ok {
 			adminFound = true
 			break
 		}

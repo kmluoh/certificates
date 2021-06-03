@@ -17,7 +17,6 @@ import (
 	acmeNoSQL "github.com/smallstep/certificates/acme/db/nosql"
 	"github.com/smallstep/certificates/api"
 	"github.com/smallstep/certificates/authority"
-	"github.com/smallstep/certificates/authority/admin"
 	adminAPI "github.com/smallstep/certificates/authority/admin/api"
 	"github.com/smallstep/certificates/authority/config"
 	"github.com/smallstep/certificates/db"
@@ -158,7 +157,7 @@ func (ca *CA) Init(config *config.Config) (*CA, error) {
 	if config.DB == nil {
 		acmeDB = nil
 	} else {
-		acmeDB, err = acmeNoSQL.New(auth.GetDatabase().(nosql.DB), admin.DefaultAuthorityID)
+		acmeDB, err = acmeNoSQL.New(auth.GetDatabase().(nosql.DB))
 		if err != nil {
 			return nil, errors.Wrap(err, "error configuring ACME DB interface")
 		}
@@ -180,12 +179,14 @@ func (ca *CA) Init(config *config.Config) (*CA, error) {
 	})
 
 	// Admin API Router
-	adminDB := auth.GetAdminDatabase()
-	if adminDB != nil {
-		adminHandler := adminAPI.NewHandler(auth)
-		mux.Route("/admin", func(r chi.Router) {
-			adminHandler.Route(r)
-		})
+	if config.AuthorityConfig.EnableAdmin {
+		adminDB := auth.GetAdminDatabase()
+		if adminDB != nil {
+			adminHandler := adminAPI.NewHandler(auth)
+			mux.Route("/admin", func(r chi.Router) {
+				adminHandler.Route(r)
+			})
+		}
 	}
 
 	if ca.shouldServeSCEPEndpoints() {

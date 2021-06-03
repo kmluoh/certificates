@@ -70,7 +70,7 @@ func TestX5C_Init(t *testing.T) {
 		"fail/no-valid-root-certs": func(t *testing.T) ProvisionerValidateTest {
 			return ProvisionerValidateTest{
 				p:   &X5C{Name: "foo", Type: "bar", Roots: []byte("foo"), audiences: testAudiences},
-				err: errors.Errorf("no x509 certificates found in roots attribute for provisioner foo"),
+				err: errors.Errorf("no x509 certificates found in roots attribute for provisioner 'foo'"),
 			}
 		},
 		"fail/invalid-duration": func(t *testing.T) ProvisionerValidateTest {
@@ -568,7 +568,7 @@ func TestX5C_AuthorizeRenew(t *testing.T) {
 			return test{
 				p:    p,
 				code: http.StatusUnauthorized,
-				err:  errors.Errorf("x5c.AuthorizeRenew; renew is disabled for x5c provisioner %s", p.GetID()),
+				err:  errors.Errorf("x5c.AuthorizeRenew; renew is disabled for x5c provisioner '%s'", p.GetName()),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -624,7 +624,7 @@ func TestX5C_AuthorizeSSHSign(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.Errorf("x5c.AuthorizeSSHSign; sshCA is disabled for x5c provisioner %s", p.GetID()),
+				err:   errors.Errorf("x5c.AuthorizeSSHSign; sshCA is disabled for x5c provisioner '%s'", p.GetName()),
 			}
 		},
 		"fail/invalid-token": func(t *testing.T) test {

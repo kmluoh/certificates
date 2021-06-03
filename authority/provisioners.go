@@ -14,7 +14,7 @@ import (
 
 // GetEncryptedKey returns the JWE key corresponding to the given kid argument.
 func (a *Authority) GetEncryptedKey(kid string) (string, error) {
-	key, ok := a.provisioners.LoadEncryptedKey(kid)
+	key, ok := a.GetProvisionerClxn().LoadEncryptedKey(kid)
 	if !ok {
 		return "", errs.NotFound("encrypted key with kid %s was not found", kid)
 	}
@@ -24,14 +24,14 @@ func (a *Authority) GetEncryptedKey(kid string) (string, error) {
 // GetProvisioners returns a map listing each provisioner and the JWK Key Set
 // with their public keys.
 func (a *Authority) GetProvisioners(cursor string, limit int) (provisioner.List, string, error) {
-	provisioners, nextCursor := a.provisioners.Find(cursor, limit)
+	provisioners, nextCursor := a.GetProvisionerClxn().Find(cursor, limit)
 	return provisioners, nextCursor, nil
 }
 
 // LoadProvisionerByCertificate returns an interface to the provisioner that
 // provisioned the certificate.
 func (a *Authority) LoadProvisionerByCertificate(crt *x509.Certificate) (provisioner.Interface, error) {
-	p, ok := a.provisioners.LoadByCertificate(crt)
+	p, ok := a.GetProvisionerClxn().LoadByCertificate(crt)
 	if !ok {
 		return nil, errs.NotFound("provisioner not found")
 	}
@@ -40,7 +40,7 @@ func (a *Authority) LoadProvisionerByCertificate(crt *x509.Certificate) (provisi
 
 // LoadProvisionerByName returns an interface to the provisioner with the given ID.
 func (a *Authority) LoadProvisionerByName(name string) (provisioner.Interface, error) {
-	p, ok := a.provisioners.LoadByName(name)
+	p, ok := a.GetProvisionerClxn().LoadByName(name)
 	if !ok {
 		return nil, errs.NotFound("provisioner %s not found", name)
 	}
@@ -137,13 +137,13 @@ func claimsToCertificates(c *linkedca.Claims) (*provisioner.Claims, error) {
 				}
 			}
 			if len(d.Max) > 0 {
-				pc.MaxUserSSHDur, err = provisioner.NewDuration(d.Max)
+				pc.MaxHostSSHDur, err = provisioner.NewDuration(d.Max)
 				if err != nil {
 					return nil, admin.WrapErrorISE(err, "error parsing claims.maxHostSSHDur: %s", d.Max)
 				}
 			}
 			if len(d.Default) > 0 {
-				pc.DefaultUserSSHDur, err = provisioner.NewDuration(d.Default)
+				pc.DefaultHostSSHDur, err = provisioner.NewDuration(d.Default)
 				if err != nil {
 					return nil, admin.WrapErrorISE(err, "error parsing claims.defaultHostSSHDur: %s", d.Default)
 				}
@@ -250,6 +250,7 @@ func ProvisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 			Claims:                claims,
 			Options:               options,
 		}, nil
+		// TODO add GCP, Azure, AWS, and SCEP
 		/*
 			case *ProvisionerDetails_GCP:
 				cfg := d.GCP

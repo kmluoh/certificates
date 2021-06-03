@@ -52,7 +52,7 @@ type DeleteResponse struct {
 func (h *Handler) GetAdmin(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	adm, ok := h.auth.GetAdminCollection().LoadByID(id)
+	adm, ok := h.auth.GetAdminClxn().LoadByID(id)
 	if !ok {
 		api.WriteError(w, admin.NewError(admin.ErrorNotFoundType,
 			"admin %s not found", id))
@@ -70,7 +70,7 @@ func (h *Handler) GetAdmins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	admins, nextCursor := h.auth.GetAdminCollection().Find(cursor, limit)
+	admins, nextCursor := h.auth.GetAdminClxn().Find(cursor, limit)
 	api.JSON(w, &GetAdminsResponse{
 		Admins:     admins,
 		NextCursor: nextCursor,
@@ -87,12 +87,12 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := body.Validate(h.auth.GetAdminCollection()); err != nil {
+	if err := body.Validate(h.auth.GetAdminClxn()); err != nil {
 		api.WriteError(w, err)
 		return
 	}
 
-	p, ok := h.auth.GetProvisionerCollection().LoadByName(body.Provisioner)
+	p, ok := h.auth.GetProvisionerClxn().LoadByName(body.Provisioner)
 	if !ok {
 		api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", body.Provisioner))
 		return
@@ -117,7 +117,7 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteAdmin(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if h.auth.GetAdminCollection().SuperCount() == 1 {
+	if h.auth.GetAdminClxn().SuperCount() == 1 {
 		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType, "cannot remove the last super admin"))
 		return
 	}
@@ -146,7 +146,7 @@ func (h *Handler) UpdateAdmin(w http.ResponseWriter, r *http.Request) {
 
 	id := chi.URLParam(r, "id")
 
-	adm, ok := h.auth.GetAdminCollection().LoadByID(id)
+	adm, ok := h.auth.GetAdminClxn().LoadByID(id)
 	if !ok {
 		api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "admin %s not found", id))
 		return

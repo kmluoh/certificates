@@ -361,7 +361,7 @@ func (a *Authority) Revoke(ctx context.Context, revokeOpts *RevokeOptions) error
 
 		// This method will also validate the audiences for JWK provisioners.
 		var ok bool
-		p, ok = a.provisioners.LoadByToken(token, &claims.Claims)
+		p, ok = a.GetProvisionerClxn().LoadByToken(token, &claims.Claims)
 		if !ok {
 			return errs.InternalServer("authority.Revoke; provisioner not found", opts...)
 		}

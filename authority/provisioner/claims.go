@@ -7,21 +7,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-type X509Claims struct {
-	Durations *Durations `json:"durations"`
-}
-
-type SSHClaims struct {
-	UserDuration *Durations `json:"userDurations"`
-	HostDuration *Durations `json:"hostDuration"`
-}
-
-type Durations struct {
-	Min     string `json:"min"`
-	Max     string `json:"max"`
-	Default string `json:"default"`
-}
-
 // Claims so that individual provisioners can override global claims.
 type Claims struct {
 	// TLS CA properties
