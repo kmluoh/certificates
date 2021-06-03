@@ -59,25 +59,27 @@ func (c *Collection) LoadByID(id string) (*linkedca.Admin, bool) {
 	return loadAdmin(c.byID, id)
 }
 
-func subProvNameHash(sub, provName string) string {
-	subHash := sha1.Sum([]byte(sub))
-	provNameHash := sha1.Sum([]byte(provName))
-	_res := sha1.Sum(append(subHash[:], provNameHash[:]...))
-	return string(_res[:])
+type subProv struct {
+	subject     string
+	provisioner string
+}
+
+func newSubProv(subject, provisioner string) subProv {
+	return subProv{subject, provisioner}
 }
 
 // LoadBySubProv a admin by the subject and provisioner name.
 func (c *Collection) LoadBySubProv(sub, provName string) (*linkedca.Admin, bool) {
-	return loadAdmin(c.bySubProv, subProvNameHash(sub, provName))
+	return loadAdmin(c.bySubProv, newSubProv(sub, provName))
 }
 
 // LoadByProvisioner a admin by the subject and provisioner name.
 func (c *Collection) LoadByProvisioner(provName string) ([]*linkedca.Admin, bool) {
-	a, ok := c.byProv.Load(provName)
+	val, ok := c.byProv.Load(provName)
 	if !ok {
 		return nil, false
 	}
-	admins, ok := a.([]*linkedca.Admin)
+	admins, ok := val.([]*linkedca.Admin)
 	if !ok {
 		return nil, false
 	}
@@ -98,7 +100,7 @@ func (c *Collection) Store(adm *linkedca.Admin) error {
 
 	provName := p.GetName()
 	// Store admin always in bySubProv. Subject <-> ProvisionerName must be unique.
-	if _, loaded := c.bySubProv.LoadOrStore(subProvNameHash(adm.Subject, provName), adm); loaded {
+	if _, loaded := c.bySubProv.LoadOrStore(newSubProv(adm.Subject, provName), adm); loaded {
 		c.byID.Delete(adm.Id)
 		return errors.New("cannot add multiple admins with the same subject and provisioner")
 	}
@@ -167,12 +169,12 @@ func (c *Collection) Find(cursor string, limit int) ([]*linkedca.Admin, string) 
 	return slice, ""
 }
 
-func loadAdmin(m *sync.Map, key string) (*linkedca.Admin, bool) {
-	a, ok := m.Load(key)
+func loadAdmin(m *sync.Map, key interface{}) (*linkedca.Admin, bool) {
+	val, ok := m.Load(key)
 	if !ok {
 		return nil, false
 	}
-	adm, ok := a.(*linkedca.Admin)
+	adm, ok := val.(*linkedca.Admin)
 	if !ok {
 		return nil, false
 	}

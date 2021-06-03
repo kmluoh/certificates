@@ -81,13 +81,13 @@ type Config struct {
 // ASN1DN contains ASN1.DN attributes that are used in Subject and Issuer
 // x509 Certificate blocks.
 type ASN1DN struct {
-	Country            string `json:"country,omitempty" step:"country"`
-	Organization       string `json:"organization,omitempty" step:"organization"`
-	OrganizationalUnit string `json:"organizationalUnit,omitempty" step:"organizationalUnit"`
-	Locality           string `json:"locality,omitempty" step:"locality"`
-	Province           string `json:"province,omitempty" step:"province"`
-	StreetAddress      string `json:"streetAddress,omitempty" step:"streetAddress"`
-	CommonName         string `json:"commonName,omitempty" step:"commonName"`
+	Country            string `json:"country,omitempty"`
+	Organization       string `json:"organization,omitempty"`
+	OrganizationalUnit string `json:"organizationalUnit,omitempty"`
+	Locality           string `json:"locality,omitempty"`
+	Province           string `json:"province,omitempty"`
+	StreetAddress      string `json:"streetAddress,omitempty"`
+	CommonName         string `json:"commonName,omitempty"`
 }
 
 // AuthConfig represents the configuration options for the authority. An

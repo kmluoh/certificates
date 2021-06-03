@@ -209,6 +209,8 @@ func TestConfigValidate(t *testing.T) {
 				}
 			} else {
 				if assert.Nil(t, tc.err) {
+					fmt.Printf("tc.tls = %+v\n", tc.tls)
+					fmt.Printf("*tc.config.TLS = %+v\n", *tc.config.TLS)
 					assert.Equals(t, *tc.config.TLS, tc.tls)
 				}
 			}
