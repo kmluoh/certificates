@@ -52,12 +52,12 @@ func (h *Handler) GetProvisioner(w http.ResponseWriter, r *http.Request) {
 	)
 	if len(id) > 0 {
 		if p, ok = h.auth.GetProvisionerClxn().Load(id); !ok {
-			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", name))
+			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id))
 			return
 		}
 	} else {
 		if p, ok = h.auth.GetProvisionerClxn().LoadByName(name); !ok {
-			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id))
+			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", name))
 			return
 		}
 	}
