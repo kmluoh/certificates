@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
@@ -250,6 +251,24 @@ func ProvisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 			Claims:                claims,
 			Options:               options,
 		}, nil
+	case *linkedca.ProvisionerDetails_AWS:
+		cfg := d.AWS
+		instanceAge, err := provisioner.NewDuration(cfg.InstanceAge)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error converting value '%s' duration",
+				cfg.InstanceAge)
+		}
+		return &provisioner.AWS{
+			ID:                     p.Id,
+			Type:                   p.Type.String(),
+			Name:                   p.Name,
+			Accounts:               cfg.Accounts,
+			DisableCustomSANs:      cfg.DisableCustomSans,
+			DisableTrustOnFirstUse: cfg.DisableTrustOnFirstUse,
+			InstanceAge:            *instanceAge,
+			Claims:                 claims,
+			Options:                options,
+		}, nil
 		// TODO add GCP, Azure, AWS, and SCEP
 		/*
 			case *ProvisionerDetails_GCP:
@@ -259,18 +278,6 @@ func ProvisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 					Name:                   p.Name,
 					ServiceAccounts:        cfg.ServiceAccounts,
 					ProjectIDs:             cfg.ProjectIds,
-					DisableCustomSANs:      cfg.DisableCustomSans,
-					DisableTrustOnFirstUse: cfg.DisableTrustOnFirstUse,
-					InstanceAge:            durationValue(cfg.InstanceAge),
-					Claims:                 claims,
-					Options:                options,
-				}, nil
-			case *ProvisionerDetails_AWS:
-				cfg := d.AWS
-				return &provisioner.AWS{
-					Type:                   p.Type.String(),
-					Name:                   p.Name,
-					Accounts:               cfg.Accounts,
 					DisableCustomSANs:      cfg.DisableCustomSans,
 					DisableTrustOnFirstUse: cfg.DisableTrustOnFirstUse,
 					InstanceAge:            durationValue(cfg.InstanceAge),
