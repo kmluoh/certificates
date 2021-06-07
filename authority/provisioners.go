@@ -269,7 +269,7 @@ func ProvisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 			Claims:                 claims,
 			Options:                options,
 		}, nil
-		// TODO add GCP, Azure, AWS, and SCEP
+		// TODO add GCP, Azure, and SCEP
 		/*
 			case *ProvisionerDetails_GCP:
 				cfg := d.GCP
