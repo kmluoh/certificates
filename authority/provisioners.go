@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pkg/errors"
 	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
@@ -253,10 +252,9 @@ func ProvisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 		}, nil
 	case *linkedca.ProvisionerDetails_AWS:
 		cfg := d.AWS
-		instanceAge, err := provisioner.NewDuration(cfg.InstanceAge)
+		instanceAge, err := parseInstanceAge(cfg.InstanceAge)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error converting value '%s' duration",
-				cfg.InstanceAge)
+			return nil, err
 		}
 		return &provisioner.AWS{
 			ID:                     p.Id,
@@ -265,7 +263,7 @@ func ProvisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 			Accounts:               cfg.Accounts,
 			DisableCustomSANs:      cfg.DisableCustomSans,
 			DisableTrustOnFirstUse: cfg.DisableTrustOnFirstUse,
-			InstanceAge:            *instanceAge,
+			InstanceAge:            instanceAge,
 			Claims:                 claims,
 			Options:                options,
 		}, nil
@@ -301,4 +299,16 @@ func ProvisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 	default:
 		return nil, fmt.Errorf("provisioner %s not implemented", p.Type)
 	}
+}
+
+func parseInstanceAge(age string) (provisioner.Duration, error) {
+	var instanceAge provisioner.Duration
+	if age != "" {
+		iap, err := provisioner.NewDuration(age)
+		if err != nil {
+			return instanceAge, err
+		}
+		instanceAge = *iap
+	}
+	return instanceAge, nil
 }
