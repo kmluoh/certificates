@@ -134,7 +134,7 @@ func (p *GCP) GetTokenID(token string) (string, error) {
 	// Create unique ID for Trust On First Use (TOFU). Only the first instance
 	// per provisioner is allowed as we don't have a way to trust the given
 	// sans.
-	unique := fmt.Sprintf("%s.%s", p.GetID(), claims.Google.ComputeEngine.InstanceID)
+	unique := fmt.Sprintf("%s.%s", p.GetIDForToken(), claims.Google.ComputeEngine.InstanceID)
 	sum := sha256.Sum256([]byte(unique))
 	return strings.ToLower(hex.EncodeToString(sum[:])), nil
 }
@@ -168,7 +168,7 @@ func (p *GCP) GetIdentityURL(audience string) string {
 
 // GetIdentityToken does an HTTP request to the identity url.
 func (p *GCP) GetIdentityToken(subject, caURL string) (string, error) {
-	audience, err := generateSignAudience(caURL, p.GetID())
+	audience, err := generateSignAudience(caURL, p.GetIDForToken())
 	if err != nil {
 		return "", err
 	}
@@ -216,7 +216,7 @@ func (p *GCP) Init(config Config) error {
 		return err
 	}
 
-	p.audiences = config.Audiences.WithFragment(p.GetID())
+	p.audiences = config.Audiences.WithFragment(p.GetIDForToken())
 	return nil
 }
 
