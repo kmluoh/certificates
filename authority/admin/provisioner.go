@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/smallstep/certificates/authority/config"
-	"github.com/smallstep/certificates/linkedca"
 	"go.step.sm/crypto/jose"
+	"go.step.sm/linkedca"
 )
 
 func NewDefaultClaims() *linkedca.Claims {

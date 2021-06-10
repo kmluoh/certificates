@@ -7,8 +7,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/smallstep/certificates/authority/admin"
-	"github.com/smallstep/certificates/linkedca"
 	"github.com/smallstep/nosql"
+	"go.step.sm/linkedca"
 )
 
 // dbProvisioner is the database representation of a Provisioner type.
@@ -97,7 +97,7 @@ func unmarshalProvisioner(data []byte, name string) (*linkedca.Provisioner, erro
 		return nil, err
 	}
 
-	details, err := linkedca.UnmarshalProvisionerDetails(dbp.Type, dbp.Details)
+	details, err := admin.UnmarshalProvisionerDetails(dbp.Type, dbp.Details)
 	if err != nil {
 		return nil, err
 	}

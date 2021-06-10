@@ -8,8 +8,8 @@ import (
 	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
-	"github.com/smallstep/certificates/linkedca"
 	"go.step.sm/crypto/jose"
+	"go.step.sm/linkedca"
 )
 
 // GetEncryptedKey returns the JWE key corresponding to the given kid argument.

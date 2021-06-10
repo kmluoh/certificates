@@ -16,11 +16,11 @@ import (
 	adminAPI "github.com/smallstep/certificates/authority/admin/api"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
-	"github.com/smallstep/certificates/linkedca"
 	"go.step.sm/cli-utils/token"
 	"go.step.sm/cli-utils/token/provision"
 	"go.step.sm/crypto/jose"
 	"go.step.sm/crypto/randutil"
+	"go.step.sm/linkedca"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 

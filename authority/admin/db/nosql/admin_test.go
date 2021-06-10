@@ -10,10 +10,10 @@ import (
 	"github.com/smallstep/assert"
 	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/db"
-	"github.com/smallstep/certificates/linkedca"
 	"github.com/smallstep/nosql"
 	"github.com/smallstep/nosql/database"
 	nosqldb "github.com/smallstep/nosql/database"
+	"go.step.sm/linkedca"
 )
 
 func TestDB_getDBAdminBytes(t *testing.T) {

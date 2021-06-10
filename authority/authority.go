@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/smallstep/certificates/cas"
-	"github.com/smallstep/certificates/linkedca"
 	"github.com/smallstep/certificates/scep"
+	"go.step.sm/linkedca"
 
 	"github.com/pkg/errors"
 	"github.com/smallstep/certificates/authority/admin"

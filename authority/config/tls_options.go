@@ -43,7 +43,7 @@ var (
 			"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
 		},
 		MinVersion:    1.2,
-		MaxVersion:    1.3,
+		MaxVersion:    1.2,
 		Renegotiation: false,
 	}
 )

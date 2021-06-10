@@ -8,7 +8,7 @@ import (
 	"github.com/smallstep/certificates/api"
 	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/authority/administrator"
-	"github.com/smallstep/certificates/linkedca"
+	"go.step.sm/linkedca"
 )
 
 // CreateAdminRequest represents the body for a CreateAdmin request.
