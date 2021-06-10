@@ -22,13 +22,23 @@ type dbAdmin struct {
 	DeletedAt     time.Time           `json:"deletedAt"`
 }
 
-func (dbp *dbAdmin) clone() *dbAdmin {
-	u := *dbp
+func (dba *dbAdmin) convert() *linkedca.Admin {
+	return &linkedca.Admin{
+		Id:            dba.ID,
+		AuthorityId:   dba.AuthorityID,
+		ProvisionerId: dba.ProvisionerID,
+		Subject:       dba.Subject,
+		Type:          dba.Type,
+	}
+}
+
+func (dba *dbAdmin) clone() *dbAdmin {
+	u := *dba
 	return &u
 }
 
 func (db *DB) getDBAdminBytes(ctx context.Context, id string) ([]byte, error) {
-	data, err := db.db.Get(authorityAdminsTable, []byte(id))
+	data, err := db.db.Get(adminsTable, []byte(id))
 	if nosql.IsErrNotFound(err) {
 		return nil, admin.NewError(admin.ErrorNotFoundType, "admin %s not found", id)
 	} else if err != nil {
@@ -69,13 +79,7 @@ func unmarshalAdmin(data []byte, id string) (*linkedca.Admin, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &linkedca.Admin{
-		Id:            dba.ID,
-		AuthorityId:   dba.AuthorityID,
-		ProvisionerId: dba.ProvisionerID,
-		Subject:       dba.Subject,
-		Type:          dba.Type,
-	}, nil
+	return dba.convert(), nil
 }
 
 // GetAdmin retrieves and unmarshals a admin from the database.
@@ -100,7 +104,7 @@ func (db *DB) GetAdmin(ctx context.Context, id string) (*linkedca.Admin, error) 
 // from the database.
 // TODO should we be paginating?
 func (db *DB) GetAdmins(ctx context.Context) ([]*linkedca.Admin, error) {
-	dbEntries, err := db.db.List(authorityAdminsTable)
+	dbEntries, err := db.db.List(adminsTable)
 	if err != nil {
 		return nil, errors.Wrap(err, "error loading admins")
 	}
@@ -145,7 +149,7 @@ func (db *DB) CreateAdmin(ctx context.Context, adm *linkedca.Admin) error {
 		CreatedAt:     clock.Now(),
 	}
 
-	return db.save(ctx, dba.ID, dba, nil, "admin", authorityAdminsTable)
+	return db.save(ctx, dba.ID, dba, nil, "admin", adminsTable)
 }
 
 // UpdateAdmin saves an updated admin to the database.
@@ -158,7 +162,7 @@ func (db *DB) UpdateAdmin(ctx context.Context, adm *linkedca.Admin) error {
 	nu := old.clone()
 	nu.Type = adm.Type
 
-	return db.save(ctx, old.ID, nu, old, "admin", authorityAdminsTable)
+	return db.save(ctx, old.ID, nu, old, "admin", adminsTable)
 }
 
 // DeleteAdmin saves an updated admin to the database.
@@ -171,5 +175,5 @@ func (db *DB) DeleteAdmin(ctx context.Context, id string) error {
 	nu := old.clone()
 	nu.DeletedAt = clock.Now()
 
-	return db.save(ctx, old.ID, nu, old, "admin", authorityAdminsTable)
+	return db.save(ctx, old.ID, nu, old, "admin", adminsTable)
 }

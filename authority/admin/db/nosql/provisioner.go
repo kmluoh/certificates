@@ -34,7 +34,7 @@ func (dbp *dbProvisioner) clone() *dbProvisioner {
 }
 
 func (db *DB) getDBProvisionerBytes(ctx context.Context, id string) ([]byte, error) {
-	data, err := db.db.Get(authorityProvisionersTable, []byte(id))
+	data, err := db.db.Get(provisionersTable, []byte(id))
 	if nosql.IsErrNotFound(err) {
 		return nil, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id)
 	} else if err != nil {
@@ -120,7 +120,7 @@ func unmarshalProvisioner(data []byte, name string) (*linkedca.Provisioner, erro
 // GetProvisioners retrieves and unmarshals all active (not deleted) provisioners
 // from the database.
 func (db *DB) GetProvisioners(ctx context.Context) ([]*linkedca.Provisioner, error) {
-	dbEntries, err := db.db.List(authorityProvisionersTable)
+	dbEntries, err := db.db.List(provisionersTable)
 	if err != nil {
 		return nil, admin.WrapErrorISE(err, "error loading provisioners")
 	}
@@ -174,7 +174,7 @@ func (db *DB) CreateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 		CreatedAt:        clock.Now(),
 	}
 
-	if err := db.save(ctx, prov.Id, dbp, nil, "provisioner", authorityProvisionersTable); err != nil {
+	if err := db.save(ctx, prov.Id, dbp, nil, "provisioner", provisionersTable); err != nil {
 		return admin.WrapErrorISE(err, "error creating provisioner %s", prov.Name)
 	}
 
@@ -202,7 +202,7 @@ func (db *DB) UpdateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 	nu.SSHTemplate = prov.SshTemplate
 	nu.SSHTemplateData = prov.SshTemplateData
 
-	if err := db.save(ctx, prov.Id, nu, old, "provisioner", authorityProvisionersTable); err != nil {
+	if err := db.save(ctx, prov.Id, nu, old, "provisioner", provisionersTable); err != nil {
 		return admin.WrapErrorISE(err, "error updating provisioner %s", prov.Name)
 	}
 
@@ -219,5 +219,5 @@ func (db *DB) DeleteProvisioner(ctx context.Context, id string) error {
 	nu := old.clone()
 	nu.DeletedAt = clock.Now()
 
-	return db.save(ctx, old.ID, nu, old, "provisioner", authorityProvisionersTable)
+	return db.save(ctx, old.ID, nu, old, "provisioner", provisionersTable)
 }
