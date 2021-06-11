@@ -11,6 +11,7 @@ import (
 	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/db"
 	"github.com/smallstep/nosql"
+	"github.com/smallstep/nosql/database"
 	nosqldb "github.com/smallstep/nosql/database"
 	"go.step.sm/linkedca"
 )
@@ -82,7 +83,7 @@ func TestDB_getDBProvisionerBytes(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, string(b), "foo")
 				}
 			}
@@ -206,7 +207,7 @@ func TestDB_getDBProvisioner(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, dbp.ID, provID)
 					assert.Equals(t, dbp.AuthorityID, tc.dbp.AuthorityID)
 					assert.Equals(t, dbp.Type, tc.dbp.Type)
@@ -294,7 +295,7 @@ func TestDB_unmarshalDBProvisioner(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, dbp.ID, provID)
 					assert.Equals(t, dbp.AuthorityID, tc.dbp.AuthorityID)
 					assert.Equals(t, dbp.Type, tc.dbp.Type)
@@ -418,7 +419,7 @@ func TestDB_unmarshalProvisioner(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, prov.Id, provID)
 					assert.Equals(t, prov.AuthorityId, tc.dbp.AuthorityID)
 					assert.Equals(t, prov.Type, tc.dbp.Type)
@@ -558,7 +559,7 @@ func TestDB_GetProvisioner(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, prov.Id, provID)
 					assert.Equals(t, prov.AuthorityId, tc.dbp.AuthorityID)
 					assert.Equals(t, prov.Type, tc.dbp.Type)
@@ -706,6 +707,135 @@ func TestDB_DeleteProvisioner(t *testing.T) {
 					if assert.NotNil(t, tc.err) {
 						assert.HasPrefix(t, err.Error(), tc.err.Error())
 					}
+				}
+			}
+		})
+	}
+}
+
+func TestDB_GetProvisioners(t *testing.T) {
+	fooProv := defaultDBP(t)
+	fooProv.Name = "foo"
+	foob, err := json.Marshal(fooProv)
+	assert.FatalError(t, err)
+
+	barProv := defaultDBP(t)
+	barProv.Name = "bar"
+	barProv.DeletedAt = clock.Now()
+	barb, err := json.Marshal(barProv)
+	assert.FatalError(t, err)
+
+	bazProv := defaultDBP(t)
+	bazProv.Name = "baz"
+	bazProv.AuthorityID = "baz"
+	bazb, err := json.Marshal(bazProv)
+	assert.FatalError(t, err)
+
+	zapProv := defaultDBP(t)
+	zapProv.Name = "zap"
+	zapb, err := json.Marshal(zapProv)
+	assert.FatalError(t, err)
+
+	type test struct {
+		db       nosql.DB
+		err      error
+		adminErr *admin.Error
+		dbp      *dbProvisioner
+	}
+	var tests = map[string]func(t *testing.T) test{
+		"fail/db.List-error": func(t *testing.T) test {
+			return test{
+				db: &db.MockNoSQLDB{
+					MList: func(bucket []byte) ([]*database.Entry, error) {
+						assert.Equals(t, bucket, provisionersTable)
+
+						return nil, errors.New("force")
+					},
+				},
+				err: errors.New("error loading provisioners"),
+			}
+		},
+		"fail/unmarshal-error": func(t *testing.T) test {
+			ret := []*database.Entry{
+				{Bucket: provisionersTable, Key: []byte("foo"), Value: foob},
+				{Bucket: provisionersTable, Key: []byte("bar"), Value: barb},
+				{Bucket: provisionersTable, Key: []byte("zap"), Value: []byte("zap")},
+			}
+			return test{
+				db: &db.MockNoSQLDB{
+					MList: func(bucket []byte) ([]*database.Entry, error) {
+						assert.Equals(t, bucket, provisionersTable)
+
+						return ret, nil
+					},
+				},
+				err: errors.New("error unmarshaling provisioner zap into dbProvisioner"),
+			}
+		},
+		"ok": func(t *testing.T) test {
+			ret := []*database.Entry{
+				{Bucket: provisionersTable, Key: []byte("foo"), Value: foob},
+				{Bucket: provisionersTable, Key: []byte("bar"), Value: barb},
+				{Bucket: provisionersTable, Key: []byte("baz"), Value: bazb},
+				{Bucket: provisionersTable, Key: []byte("zap"), Value: zapb},
+			}
+			return test{
+				db: &db.MockNoSQLDB{
+					MList: func(bucket []byte) ([]*database.Entry, error) {
+						assert.Equals(t, bucket, provisionersTable)
+
+						return ret, nil
+					},
+				},
+			}
+		},
+	}
+	for name, run := range tests {
+		tc := run(t)
+		t.Run(name, func(t *testing.T) {
+			db := DB{db: tc.db, authorityID: admin.DefaultAuthorityID}
+			if provs, err := db.GetProvisioners(context.Background()); err != nil {
+				switch k := err.(type) {
+				case *admin.Error:
+					if assert.NotNil(t, tc.adminErr) {
+						assert.Equals(t, k.Type, tc.adminErr.Type)
+						assert.Equals(t, k.Detail, tc.adminErr.Detail)
+						assert.Equals(t, k.Status, tc.adminErr.Status)
+						assert.Equals(t, k.Err.Error(), tc.adminErr.Err.Error())
+						assert.Equals(t, k.Detail, tc.adminErr.Detail)
+					}
+				default:
+					if assert.NotNil(t, tc.err) {
+						assert.HasPrefix(t, err.Error(), tc.err.Error())
+					}
+				}
+			} else {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
+					assert.Equals(t, len(provs), 2)
+
+					assert.Equals(t, provs[0].Id, fooProv.ID)
+					assert.Equals(t, provs[0].AuthorityId, fooProv.AuthorityID)
+					assert.Equals(t, provs[0].Type, fooProv.Type)
+					assert.Equals(t, provs[0].Name, fooProv.Name)
+					assert.Equals(t, provs[0].Claims, fooProv.Claims)
+					assert.Equals(t, provs[0].X509Template, fooProv.X509Template)
+					assert.Equals(t, provs[0].SshTemplate, fooProv.SSHTemplate)
+
+					retDetailsBytes, err := json.Marshal(provs[0].Details.GetData())
+					assert.FatalError(t, err)
+					assert.Equals(t, retDetailsBytes, fooProv.Details)
+
+					assert.Equals(t, provs[1].Id, zapProv.ID)
+					assert.Equals(t, provs[1].AuthorityId, zapProv.AuthorityID)
+					assert.Equals(t, provs[1].Type, zapProv.Type)
+					assert.Equals(t, provs[1].Name, zapProv.Name)
+					assert.Equals(t, provs[1].Claims, zapProv.Claims)
+					assert.Equals(t, provs[1].X509Template, zapProv.X509Template)
+					assert.Equals(t, provs[1].SshTemplate, zapProv.SSHTemplate)
+
+					retDetailsBytes, err = json.Marshal(provs[1].Details.GetData())
+					assert.FatalError(t, err)
+					assert.Equals(t, retDetailsBytes, zapProv.Details)
 				}
 			}
 		})
@@ -962,144 +1092,4 @@ func TestDB_CreateAdmin(t *testing.T) {
 	}
 }
 
-func TestDB_GetAdmins(t *testing.T) {
-	now := clock.Now()
-	fooAdmin := &dbProvisioner{
-		ID:            "foo",
-		AuthorityID:   admin.DefaultAuthorityID,
-		ProvisionerID: "provID",
-		Subject:       "foo@smallstep.com",
-		Type:          linkedca.Admin_SUPER_ADMIN,
-		CreatedAt:     now,
-	}
-	foob, err := json.Marshal(fooAdmin)
-	assert.FatalError(t, err)
-
-	barAdmin := &dbProvisioner{
-		ID:            "bar",
-		AuthorityID:   admin.DefaultAuthorityID,
-		ProvisionerID: "provID",
-		Subject:       "bar@smallstep.com",
-		Type:          linkedca.Admin_ADMIN,
-		CreatedAt:     now,
-		DeletedAt:     now,
-	}
-	barb, err := json.Marshal(barAdmin)
-	assert.FatalError(t, err)
-
-	bazAdmin := &dbProvisioner{
-		ID:            "baz",
-		AuthorityID:   "bazzer",
-		ProvisionerID: "provID",
-		Subject:       "baz@smallstep.com",
-		Type:          linkedca.Admin_ADMIN,
-		CreatedAt:     now,
-	}
-	bazb, err := json.Marshal(bazAdmin)
-	assert.FatalError(t, err)
-
-	zapAdmin := &dbProvisioner{
-		ID:            "zap",
-		AuthorityID:   admin.DefaultAuthorityID,
-		ProvisionerID: "provID",
-		Subject:       "zap@smallstep.com",
-		Type:          linkedca.Admin_ADMIN,
-		CreatedAt:     now,
-	}
-	zapb, err := json.Marshal(zapAdmin)
-	assert.FatalError(t, err)
-	type test struct {
-		db       nosql.DB
-		err      error
-		adminErr *admin.Error
-		dbp      *dbProvisioner
-	}
-	var tests = map[string]func(t *testing.T) test{
-		"fail/db.List-error": func(t *testing.T) test {
-			return test{
-				db: &db.MockNoSQLDB{
-					MList: func(bucket []byte) ([]*database.Entry, error) {
-						assert.Equals(t, bucket, provisionersTable)
-
-						return nil, errors.New("force")
-					},
-				},
-				err: errors.New("error loading admins: force"),
-			}
-		},
-		"fail/unmarshal-error": func(t *testing.T) test {
-			ret := []*database.Entry{
-				{Bucket: provisionersTable, Key: []byte("foo"), Value: foob},
-				{Bucket: provisionersTable, Key: []byte("bar"), Value: barb},
-				{Bucket: provisionersTable, Key: []byte("zap"), Value: []byte("zap")},
-			}
-			return test{
-				db: &db.MockNoSQLDB{
-					MList: func(bucket []byte) ([]*database.Entry, error) {
-						assert.Equals(t, bucket, provisionersTable)
-
-						return ret, nil
-					},
-				},
-				err: errors.New("error unmarshaling admin zap into dbProvisioner"),
-			}
-		},
-		"ok": func(t *testing.T) test {
-			ret := []*database.Entry{
-				{Bucket: provisionersTable, Key: []byte("foo"), Value: foob},
-				{Bucket: provisionersTable, Key: []byte("bar"), Value: barb},
-				{Bucket: provisionersTable, Key: []byte("baz"), Value: bazb},
-				{Bucket: provisionersTable, Key: []byte("zap"), Value: zapb},
-			}
-			return test{
-				db: &db.MockNoSQLDB{
-					MList: func(bucket []byte) ([]*database.Entry, error) {
-						assert.Equals(t, bucket, provisionersTable)
-
-						return ret, nil
-					},
-				},
-				err: errors.New("error unmarshaling admin zap into dbProvisioner"),
-			}
-		},
-	}
-	for name, run := range tests {
-		tc := run(t)
-		t.Run(name, func(t *testing.T) {
-			db := DB{db: tc.db, authorityID: admin.DefaultAuthorityID}
-			if admins, err := db.GetAdmins(context.Background()); err != nil {
-				switch k := err.(type) {
-				case *admin.Error:
-					if assert.NotNil(t, tc.adminErr) {
-						assert.Equals(t, k.Type, tc.adminErr.Type)
-						assert.Equals(t, k.Detail, tc.adminErr.Detail)
-						assert.Equals(t, k.Status, tc.adminErr.Status)
-						assert.Equals(t, k.Err.Error(), tc.adminErr.Err.Error())
-						assert.Equals(t, k.Detail, tc.adminErr.Detail)
-					}
-				default:
-					if assert.NotNil(t, tc.err) {
-						assert.HasPrefix(t, err.Error(), tc.err.Error())
-					}
-				}
-			} else {
-				if assert.NotNil(t, admins) {
-					assert.Equals(t, len(admins), 2)
-
-					assert.Equals(t, admins[0].Id, fooAdmin.ID)
-					assert.Equals(t, admins[0].AuthorityId, fooAdmin.AuthorityID)
-					assert.Equals(t, admins[0].ProvisionerId, fooAdmin.ProvisionerID)
-					assert.Equals(t, admins[0].Subject, fooAdmin.Subject)
-					assert.Equals(t, admins[0].Type, fooAdmin.Type)
-
-					assert.Equals(t, admins[1].Id, zapAdmin.ID)
-					assert.Equals(t, admins[1].AuthorityId, zapAdmin.AuthorityID)
-					assert.Equals(t, admins[1].ProvisionerId, zapAdmin.ProvisionerID)
-					assert.Equals(t, admins[1].Subject, zapAdmin.Subject)
-					assert.Equals(t, admins[1].Type, zapAdmin.Type)
-				}
-			}
-		})
-	}
-}
 */

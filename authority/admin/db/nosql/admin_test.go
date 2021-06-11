@@ -210,7 +210,7 @@ func TestDB_getDBAdmin(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, dba.ID, adminID)
 					assert.Equals(t, dba.AuthorityID, tc.dba.AuthorityID)
 					assert.Equals(t, dba.ProvisionerID, tc.dba.ProvisionerID)
@@ -300,7 +300,7 @@ func TestDB_unmarshalDBAdmin(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, dba.ID, adminID)
 					assert.Equals(t, dba.AuthorityID, tc.dba.AuthorityID)
 					assert.Equals(t, dba.ProvisionerID, tc.dba.ProvisionerID)
@@ -377,7 +377,7 @@ func TestDB_unmarshalAdmin(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, adm.Id, adminID)
 					assert.Equals(t, adm.AuthorityId, tc.dba.AuthorityID)
 					assert.Equals(t, adm.ProvisionerId, tc.dba.ProvisionerID)
@@ -533,7 +533,7 @@ func TestDB_GetAdmin(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, adm.Id, adminID)
 					assert.Equals(t, adm.AuthorityId, tc.dba.AuthorityID)
 					assert.Equals(t, adm.ProvisionerId, tc.dba.ProvisionerID)
@@ -1036,7 +1036,6 @@ func TestDB_GetAdmins(t *testing.T) {
 						return ret, nil
 					},
 				},
-				err: errors.New("error unmarshaling admin zap into dbAdmin"),
 			}
 		},
 	}
@@ -1060,7 +1059,7 @@ func TestDB_GetAdmins(t *testing.T) {
 					}
 				}
 			} else {
-				if assert.NotNil(t, admins) {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
 					assert.Equals(t, len(admins), 2)
 
 					assert.Equals(t, admins[0].Id, fooAdmin.ID)

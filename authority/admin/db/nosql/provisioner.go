@@ -113,7 +113,7 @@ func (db *DB) GetProvisioner(ctx context.Context, id string) (*linkedca.Provisio
 func (db *DB) GetProvisioners(ctx context.Context) ([]*linkedca.Provisioner, error) {
 	dbEntries, err := db.db.List(provisionersTable)
 	if err != nil {
-		return nil, admin.WrapErrorISE(err, "error loading provisioners")
+		return nil, errors.Wrap(err, "error loading provisioners")
 	}
 	var provs []*linkedca.Provisioner
 	for _, entry := range dbEntries {
