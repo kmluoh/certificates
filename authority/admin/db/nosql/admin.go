@@ -47,14 +47,13 @@ func (db *DB) getDBAdminBytes(ctx context.Context, id string) ([]byte, error) {
 	return data, nil
 }
 
-func (db *DB) getDBAdmin(ctx context.Context, id string) (*dbAdmin, error) {
-	data, err := db.getDBAdminBytes(ctx, id)
-	if err != nil {
-		return nil, err
+func (db *DB) unmarshalDBAdmin(data []byte, id string) (*dbAdmin, error) {
+	var dba = new(dbAdmin)
+	if err := json.Unmarshal(data, dba); err != nil {
+		return nil, errors.Wrapf(err, "error unmarshaling admin %s into dbAdmin", id)
 	}
-	dba, err := unmarshalDBAdmin(data, id)
-	if err != nil {
-		return nil, err
+	if !dba.DeletedAt.IsZero() {
+		return nil, admin.NewError(admin.ErrorDeletedType, "admin %s is deleted", id)
 	}
 	if dba.AuthorityID != db.authorityID {
 		return nil, admin.NewError(admin.ErrorAuthorityMismatchType,
@@ -63,19 +62,20 @@ func (db *DB) getDBAdmin(ctx context.Context, id string) (*dbAdmin, error) {
 	return dba, nil
 }
 
-func unmarshalDBAdmin(data []byte, id string) (*dbAdmin, error) {
-	var dba = new(dbAdmin)
-	if err := json.Unmarshal(data, dba); err != nil {
-		return nil, errors.Wrapf(err, "error unmarshaling admin %s into dbAdmin", id)
+func (db *DB) getDBAdmin(ctx context.Context, id string) (*dbAdmin, error) {
+	data, err := db.getDBAdminBytes(ctx, id)
+	if err != nil {
+		return nil, err
 	}
-	if !dba.DeletedAt.IsZero() {
-		return nil, admin.NewError(admin.ErrorDeletedType, "admin %s is deleted", id)
+	dba, err := db.unmarshalDBAdmin(data, id)
+	if err != nil {
+		return nil, err
 	}
 	return dba, nil
 }
 
-func unmarshalAdmin(data []byte, id string) (*linkedca.Admin, error) {
-	dba, err := unmarshalDBAdmin(data, id)
+func (db *DB) unmarshalAdmin(data []byte, id string) (*linkedca.Admin, error) {
+	dba, err := db.unmarshalDBAdmin(data, id)
 	if err != nil {
 		return nil, err
 	}
@@ -88,13 +88,9 @@ func (db *DB) GetAdmin(ctx context.Context, id string) (*linkedca.Admin, error) 
 	if err != nil {
 		return nil, err
 	}
-	adm, err := unmarshalAdmin(data, id)
+	adm, err := db.unmarshalAdmin(data, id)
 	if err != nil {
 		return nil, err
-	}
-	if adm.AuthorityId != db.authorityID {
-		return nil, admin.NewError(admin.ErrorAuthorityMismatchType,
-			"admin %s is not owned by authority %s", adm.Id, db.authorityID)
 	}
 
 	return adm, nil
@@ -110,11 +106,11 @@ func (db *DB) GetAdmins(ctx context.Context) ([]*linkedca.Admin, error) {
 	}
 	var admins = []*linkedca.Admin{}
 	for _, entry := range dbEntries {
-		adm, err := unmarshalAdmin(entry.Value, string(entry.Key))
+		adm, err := db.unmarshalAdmin(entry.Value, string(entry.Key))
 		if err != nil {
 			switch k := err.(type) {
 			case *admin.Error:
-				if k.IsType(admin.ErrorDeletedType) {
+				if k.IsType(admin.ErrorDeletedType) || k.IsType(admin.ErrorAuthorityMismatchType) {
 					continue
 				} else {
 					return nil, err

@@ -13,19 +13,18 @@ import (
 
 // dbProvisioner is the database representation of a Provisioner type.
 type dbProvisioner struct {
-	ID          string                    `json:"id"`
-	AuthorityID string                    `json:"authorityID"`
-	Type        linkedca.Provisioner_Type `json:"type"`
-	// Name is the key
-	Name             string           `json:"name"`
-	Claims           *linkedca.Claims `json:"claims"`
-	Details          []byte           `json:"details"`
-	X509Template     []byte           `json:"x509Template"`
-	X509TemplateData []byte           `json:"x509TemplateData"`
-	SSHTemplate      []byte           `json:"sshTemplate"`
-	SSHTemplateData  []byte           `json:"sshTemplateData"`
-	CreatedAt        time.Time        `json:"createdAt"`
-	DeletedAt        time.Time        `json:"deletedAt"`
+	ID               string                    `json:"id"`
+	AuthorityID      string                    `json:"authorityID"`
+	Type             linkedca.Provisioner_Type `json:"type"`
+	Name             string                    `json:"name"`
+	Claims           *linkedca.Claims          `json:"claims"`
+	Details          []byte                    `json:"details"`
+	X509Template     []byte                    `json:"x509Template"`
+	X509TemplateData []byte                    `json:"x509TemplateData"`
+	SSHTemplate      []byte                    `json:"sshTemplate"`
+	SSHTemplateData  []byte                    `json:"sshTemplateData"`
+	CreatedAt        time.Time                 `json:"createdAt"`
+	DeletedAt        time.Time                 `json:"deletedAt"`
 }
 
 func (dbp *dbProvisioner) clone() *dbProvisioner {
@@ -43,56 +42,35 @@ func (db *DB) getDBProvisionerBytes(ctx context.Context, id string) ([]byte, err
 	return data, nil
 }
 
-func (db *DB) getDBProvisioner(ctx context.Context, id string) (*dbProvisioner, error) {
-	data, err := db.getDBProvisionerBytes(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	dbp, err := unmarshalDBProvisioner(data, id)
-	if err != nil {
-		return nil, err
+func (db *DB) unmarshalDBProvisioner(data []byte, id string) (*dbProvisioner, error) {
+	var dbp = new(dbProvisioner)
+	if err := json.Unmarshal(data, dbp); err != nil {
+		return nil, errors.Wrapf(err, "error unmarshaling provisioner %s into dbProvisioner", id)
 	}
 	if !dbp.DeletedAt.IsZero() {
 		return nil, admin.NewError(admin.ErrorDeletedType, "provisioner %s is deleted", id)
 	}
 	if dbp.AuthorityID != db.authorityID {
 		return nil, admin.NewError(admin.ErrorAuthorityMismatchType,
-			"provisioner %s is not owned by authority %s", dbp.ID, db.authorityID)
+			"provisioner %s is not owned by authority %s", id, db.authorityID)
 	}
 	return dbp, nil
 }
 
-// GetProvisioner retrieves and unmarshals a provisioner from the database.
-func (db *DB) GetProvisioner(ctx context.Context, id string) (*linkedca.Provisioner, error) {
+func (db *DB) getDBProvisioner(ctx context.Context, id string) (*dbProvisioner, error) {
 	data, err := db.getDBProvisionerBytes(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-
-	prov, err := unmarshalProvisioner(data, id)
+	dbp, err := db.unmarshalDBProvisioner(data, id)
 	if err != nil {
 		return nil, err
-	}
-	if prov.AuthorityId != db.authorityID {
-		return nil, admin.NewError(admin.ErrorAuthorityMismatchType,
-			"provisioner %s is not owned by authority %s", prov.Id, db.authorityID)
-	}
-	return prov, nil
-}
-
-func unmarshalDBProvisioner(data []byte, name string) (*dbProvisioner, error) {
-	var dbp = new(dbProvisioner)
-	if err := json.Unmarshal(data, dbp); err != nil {
-		return nil, errors.Wrapf(err, "error unmarshaling provisioner %s into dbProvisioner", name)
-	}
-	if !dbp.DeletedAt.IsZero() {
-		return nil, admin.NewError(admin.ErrorDeletedType, "provisioner %s is deleted", name)
 	}
 	return dbp, nil
 }
 
-func unmarshalProvisioner(data []byte, name string) (*linkedca.Provisioner, error) {
-	dbp, err := unmarshalDBProvisioner(data, name)
+func (db *DB) unmarshalProvisioner(data []byte, id string) (*linkedca.Provisioner, error) {
+	dbp, err := db.unmarshalDBProvisioner(data, id)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +95,20 @@ func unmarshalProvisioner(data []byte, name string) (*linkedca.Provisioner, erro
 	return prov, nil
 }
 
+// GetProvisioner retrieves and unmarshals a provisioner from the database.
+func (db *DB) GetProvisioner(ctx context.Context, id string) (*linkedca.Provisioner, error) {
+	data, err := db.getDBProvisionerBytes(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	prov, err := db.unmarshalProvisioner(data, id)
+	if err != nil {
+		return nil, err
+	}
+	return prov, nil
+}
+
 // GetProvisioners retrieves and unmarshals all active (not deleted) provisioners
 // from the database.
 func (db *DB) GetProvisioners(ctx context.Context) ([]*linkedca.Provisioner, error) {
@@ -126,11 +118,11 @@ func (db *DB) GetProvisioners(ctx context.Context) ([]*linkedca.Provisioner, err
 	}
 	var provs []*linkedca.Provisioner
 	for _, entry := range dbEntries {
-		prov, err := unmarshalProvisioner(entry.Value, string(entry.Key))
+		prov, err := db.unmarshalProvisioner(entry.Value, string(entry.Key))
 		if err != nil {
 			switch k := err.(type) {
 			case *admin.Error:
-				if k.IsType(admin.ErrorDeletedType) {
+				if k.IsType(admin.ErrorDeletedType) || k.IsType(admin.ErrorAuthorityMismatchType) {
 					continue
 				} else {
 					return nil, err
