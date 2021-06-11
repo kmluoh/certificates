@@ -13,18 +13,16 @@ import (
 
 // dbProvisioner is the database representation of a Provisioner type.
 type dbProvisioner struct {
-	ID               string                    `json:"id"`
-	AuthorityID      string                    `json:"authorityID"`
-	Type             linkedca.Provisioner_Type `json:"type"`
-	Name             string                    `json:"name"`
-	Claims           *linkedca.Claims          `json:"claims"`
-	Details          []byte                    `json:"details"`
-	X509Template     []byte                    `json:"x509Template"`
-	X509TemplateData []byte                    `json:"x509TemplateData"`
-	SSHTemplate      []byte                    `json:"sshTemplate"`
-	SSHTemplateData  []byte                    `json:"sshTemplateData"`
-	CreatedAt        time.Time                 `json:"createdAt"`
-	DeletedAt        time.Time                 `json:"deletedAt"`
+	ID           string                    `json:"id"`
+	AuthorityID  string                    `json:"authorityID"`
+	Type         linkedca.Provisioner_Type `json:"type"`
+	Name         string                    `json:"name"`
+	Claims       *linkedca.Claims          `json:"claims"`
+	Details      []byte                    `json:"details"`
+	X509Template *linkedca.Template        `json:"x509Template"`
+	SSHTemplate  *linkedca.Template        `json:"sshTemplate"`
+	CreatedAt    time.Time                 `json:"createdAt"`
+	DeletedAt    time.Time                 `json:"deletedAt"`
 }
 
 func (dbp *dbProvisioner) clone() *dbProvisioner {
@@ -81,16 +79,14 @@ func (db *DB) unmarshalProvisioner(data []byte, id string) (*linkedca.Provisione
 	}
 
 	prov := &linkedca.Provisioner{
-		Id:               dbp.ID,
-		AuthorityId:      dbp.AuthorityID,
-		Type:             dbp.Type,
-		Name:             dbp.Name,
-		Claims:           dbp.Claims,
-		Details:          details,
-		X509Template:     dbp.X509Template,
-		X509TemplateData: dbp.X509TemplateData,
-		SshTemplate:      dbp.SSHTemplate,
-		SshTemplateData:  dbp.SSHTemplateData,
+		Id:           dbp.ID,
+		AuthorityId:  dbp.AuthorityID,
+		Type:         dbp.Type,
+		Name:         dbp.Name,
+		Claims:       dbp.Claims,
+		Details:      details,
+		X509Template: dbp.X509Template,
+		SshTemplate:  dbp.SSHTemplate,
 	}
 	return prov, nil
 }
@@ -153,17 +149,15 @@ func (db *DB) CreateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 	}
 
 	dbp := &dbProvisioner{
-		ID:               prov.Id,
-		AuthorityID:      db.authorityID,
-		Type:             prov.Type,
-		Name:             prov.Name,
-		Claims:           prov.Claims,
-		Details:          details,
-		X509Template:     prov.X509Template,
-		X509TemplateData: prov.X509TemplateData,
-		SSHTemplate:      prov.SshTemplate,
-		SSHTemplateData:  prov.SshTemplateData,
-		CreatedAt:        clock.Now(),
+		ID:           prov.Id,
+		AuthorityID:  db.authorityID,
+		Type:         prov.Type,
+		Name:         prov.Name,
+		Claims:       prov.Claims,
+		Details:      details,
+		X509Template: prov.X509Template,
+		SSHTemplate:  prov.SshTemplate,
+		CreatedAt:    clock.Now(),
 	}
 
 	if err := db.save(ctx, prov.Id, dbp, nil, "provisioner", provisionersTable); err != nil {
@@ -190,9 +184,7 @@ func (db *DB) UpdateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 		return admin.WrapErrorISE(err, "error marshaling details when updating provisioner %s", prov.Name)
 	}
 	nu.X509Template = prov.X509Template
-	nu.X509TemplateData = prov.X509TemplateData
 	nu.SSHTemplate = prov.SshTemplate
-	nu.SSHTemplateData = prov.SshTemplateData
 
 	if err := db.save(ctx, prov.Id, nu, old, "provisioner", provisionersTable); err != nil {
 		return admin.WrapErrorISE(err, "error updating provisioner %s", prov.Name)

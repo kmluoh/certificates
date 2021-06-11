@@ -62,12 +62,12 @@ func provisionerListToCertificates(l []*linkedca.Provisioner) (provisioner.List,
 func optionsToCertificates(p *linkedca.Provisioner) *provisioner.Options {
 	return &provisioner.Options{
 		X509: &provisioner.X509Options{
-			Template:     string(p.X509Template),
-			TemplateData: p.X509TemplateData,
+			Template:     string(p.X509Template.Template),
+			TemplateData: p.X509Template.Data,
 		},
 		SSH: &provisioner.SSHOptions{
-			Template:     string(p.SshTemplate),
-			TemplateData: p.SshTemplateData,
+			Template:     string(p.SshTemplate.Template),
+			TemplateData: p.SshTemplate.Data,
 		},
 	}
 }
