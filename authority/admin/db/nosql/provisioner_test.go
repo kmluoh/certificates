@@ -878,6 +878,112 @@ func TestDB_GetProvisioners(t *testing.T) {
 	}
 }
 
+func TestDB_CreateProvisioner(t *testing.T) {
+	type test struct {
+		db       nosql.DB
+		err      error
+		adminErr *admin.Error
+		prov     *linkedca.Provisioner
+	}
+	var tests = map[string]func(t *testing.T) test{
+		"fail/save-error": func(t *testing.T) test {
+			dbp := defaultDBP(t)
+			prov, err := dbp.convert2linkedca()
+			assert.FatalError(t, err)
+
+			return test{
+				prov: prov,
+				db: &db.MockNoSQLDB{
+					MCmpAndSwap: func(bucket, key, old, nu []byte) ([]byte, bool, error) {
+						assert.Equals(t, bucket, provisionersTable)
+						assert.Equals(t, old, nil)
+
+						var _dbp = new(dbProvisioner)
+						assert.FatalError(t, json.Unmarshal(nu, _dbp))
+
+						assert.True(t, len(_dbp.ID) > 0 && _dbp.ID == string(key))
+						assert.Equals(t, _dbp.AuthorityID, prov.AuthorityId)
+						assert.Equals(t, _dbp.Type, prov.Type)
+						assert.Equals(t, _dbp.Name, prov.Name)
+						assert.Equals(t, _dbp.Claims, prov.Claims)
+						assert.Equals(t, _dbp.X509Template, prov.X509Template)
+						assert.Equals(t, _dbp.SSHTemplate, prov.SshTemplate)
+
+						retDetailsBytes, err := json.Marshal(prov.Details.GetData())
+						assert.FatalError(t, err)
+						assert.Equals(t, retDetailsBytes, _dbp.Details)
+
+						assert.True(t, _dbp.DeletedAt.IsZero())
+						assert.True(t, _dbp.CreatedAt.Before(time.Now()))
+						assert.True(t, _dbp.CreatedAt.After(time.Now().Add(-time.Minute)))
+
+						return nil, false, errors.New("force")
+					},
+				},
+				adminErr: admin.NewErrorISE("error creating provisioner provName: error saving authority provisioner: force"),
+			}
+		},
+		"ok": func(t *testing.T) test {
+			dbp := defaultDBP(t)
+			prov, err := dbp.convert2linkedca()
+			assert.FatalError(t, err)
+
+			return test{
+				prov: prov,
+				db: &db.MockNoSQLDB{
+					MCmpAndSwap: func(bucket, key, old, nu []byte) ([]byte, bool, error) {
+						assert.Equals(t, bucket, provisionersTable)
+						assert.Equals(t, old, nil)
+
+						var _dbp = new(dbProvisioner)
+						assert.FatalError(t, json.Unmarshal(nu, _dbp))
+
+						assert.True(t, len(_dbp.ID) > 0 && _dbp.ID == string(key))
+						assert.Equals(t, _dbp.AuthorityID, prov.AuthorityId)
+						assert.Equals(t, _dbp.Type, prov.Type)
+						assert.Equals(t, _dbp.Name, prov.Name)
+						assert.Equals(t, _dbp.Claims, prov.Claims)
+						assert.Equals(t, _dbp.X509Template, prov.X509Template)
+						assert.Equals(t, _dbp.SSHTemplate, prov.SshTemplate)
+
+						retDetailsBytes, err := json.Marshal(prov.Details.GetData())
+						assert.FatalError(t, err)
+						assert.Equals(t, retDetailsBytes, _dbp.Details)
+
+						assert.True(t, _dbp.DeletedAt.IsZero())
+						assert.True(t, _dbp.CreatedAt.Before(time.Now()))
+						assert.True(t, _dbp.CreatedAt.After(time.Now().Add(-time.Minute)))
+
+						return nu, true, nil
+					},
+				},
+			}
+		},
+	}
+	for name, run := range tests {
+		tc := run(t)
+		t.Run(name, func(t *testing.T) {
+			db := DB{db: tc.db, authorityID: admin.DefaultAuthorityID}
+			if err := db.CreateProvisioner(context.Background(), tc.prov); err != nil {
+				switch k := err.(type) {
+				case *admin.Error:
+					if assert.NotNil(t, tc.adminErr) {
+						assert.Equals(t, k.Type, tc.adminErr.Type)
+						assert.Equals(t, k.Detail, tc.adminErr.Detail)
+						assert.Equals(t, k.Status, tc.adminErr.Status)
+						assert.Equals(t, k.Err.Error(), tc.adminErr.Err.Error())
+						assert.Equals(t, k.Detail, tc.adminErr.Detail)
+					}
+				default:
+					if assert.NotNil(t, tc.err) {
+						assert.HasPrefix(t, err.Error(), tc.err.Error())
+					}
+				}
+			}
+		})
+	}
+}
+
 /*
 func TestDB_UpdateAdmin(t *testing.T) {
 	provID := "provID"
@@ -1030,102 +1136,5 @@ func TestDB_UpdateAdmin(t *testing.T) {
 	}
 }
 
-func TestDB_CreateAdmin(t *testing.T) {
-	type test struct {
-		db       nosql.DB
-		err      error
-		adminErr *admin.Error
-		adm      *linkedca.Admin
-	}
-	var tests = map[string]func(t *testing.T) test{
-		"fail/save-error": func(t *testing.T) test {
-			adm := &linkedca.Admin{
-				AuthorityId:   admin.DefaultAuthorityID,
-				ProvisionerId: "provID",
-				Subject:       "max@smallstep.com",
-				Type:          linkedca.Admin_ADMIN,
-			}
-
-			return test{
-				adm: adm,
-				db: &db.MockNoSQLDB{
-					MCmpAndSwap: func(bucket, key, old, nu []byte) ([]byte, bool, error) {
-						assert.Equals(t, bucket, provisionersTable)
-						assert.Equals(t, old, nil)
-
-						var _dbp = new(dbProvisioner)
-						assert.FatalError(t, json.Unmarshal(nu, _dbp))
-
-						assert.True(t, len(_dbp.ID) > 0 && _dbp.ID == string(key))
-						assert.Equals(t, _dbp.AuthorityID, adm.AuthorityId)
-						assert.Equals(t, _dbp.ProvisionerID, adm.ProvisionerId)
-						assert.Equals(t, _dbp.Subject, adm.Subject)
-						assert.Equals(t, _dbp.Type, linkedca.Admin_ADMIN)
-
-						assert.True(t, _dbp.CreatedAt.Before(time.Now()))
-						assert.True(t, _dbp.CreatedAt.After(time.Now().Add(-time.Minute)))
-
-						return nil, false, errors.New("force")
-					},
-				},
-				err: errors.New("error saving authority provisioner: force"),
-			}
-		},
-		"ok": func(t *testing.T) test {
-			adm := &linkedca.Admin{
-				AuthorityId:   admin.DefaultAuthorityID,
-				ProvisionerId: "provID",
-				Subject:       "max@smallstep.com",
-				Type:          linkedca.Admin_ADMIN,
-			}
-
-			return test{
-				adm: adm,
-				db: &db.MockNoSQLDB{
-					MCmpAndSwap: func(bucket, key, old, nu []byte) ([]byte, bool, error) {
-						assert.Equals(t, bucket, provisionersTable)
-						assert.Equals(t, old, nil)
-
-						var _dbp = new(dbProvisioner)
-						assert.FatalError(t, json.Unmarshal(nu, _dbp))
-
-						assert.True(t, len(_dbp.ID) > 0 && _dbp.ID == string(key))
-						assert.Equals(t, _dbp.AuthorityID, adm.AuthorityId)
-						assert.Equals(t, _dbp.ProvisionerID, adm.ProvisionerId)
-						assert.Equals(t, _dbp.Subject, adm.Subject)
-						assert.Equals(t, _dbp.Type, linkedca.Admin_ADMIN)
-
-						assert.True(t, _dbp.CreatedAt.Before(time.Now()))
-						assert.True(t, _dbp.CreatedAt.After(time.Now().Add(-time.Minute)))
-
-						return nu, true, nil
-					},
-				},
-			}
-		},
-	}
-	for name, run := range tests {
-		tc := run(t)
-		t.Run(name, func(t *testing.T) {
-			db := DB{db: tc.db, authorityID: admin.DefaultAuthorityID}
-			if err := db.CreateAdmin(context.Background(), tc.adm); err != nil {
-				switch k := err.(type) {
-				case *admin.Error:
-					if assert.NotNil(t, tc.adminErr) {
-						assert.Equals(t, k.Type, tc.adminErr.Type)
-						assert.Equals(t, k.Detail, tc.adminErr.Detail)
-						assert.Equals(t, k.Status, tc.adminErr.Status)
-						assert.Equals(t, k.Err.Error(), tc.adminErr.Err.Error())
-						assert.Equals(t, k.Detail, tc.adminErr.Detail)
-					}
-				default:
-					if assert.NotNil(t, tc.err) {
-						assert.HasPrefix(t, err.Error(), tc.err.Error())
-					}
-				}
-			}
-		})
-	}
-}
 
 */

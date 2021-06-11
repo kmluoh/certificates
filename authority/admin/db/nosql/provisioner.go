@@ -31,6 +31,26 @@ func (dbp *dbProvisioner) clone() *dbProvisioner {
 	return &u
 }
 
+func (dbp *dbProvisioner) convert2linkedca() (*linkedca.Provisioner, error) {
+	details, err := admin.UnmarshalProvisionerDetails(dbp.Type, dbp.Details)
+	if err != nil {
+		return nil, err
+	}
+
+	return &linkedca.Provisioner{
+		Id:           dbp.ID,
+		AuthorityId:  dbp.AuthorityID,
+		Type:         dbp.Type,
+		Name:         dbp.Name,
+		Claims:       dbp.Claims,
+		Details:      details,
+		X509Template: dbp.X509Template,
+		SshTemplate:  dbp.SSHTemplate,
+		CreatedAt:    timestamppb.New(dbp.CreatedAt),
+		DeletedAt:    timestamppb.New(dbp.DeletedAt),
+	}, nil
+}
+
 func (db *DB) getDBProvisionerBytes(ctx context.Context, id string) ([]byte, error) {
 	data, err := db.db.Get(provisionersTable, []byte(id))
 	if nosql.IsErrNotFound(err) {
@@ -74,24 +94,7 @@ func (db *DB) unmarshalProvisioner(data []byte, id string) (*linkedca.Provisione
 		return nil, err
 	}
 
-	details, err := admin.UnmarshalProvisionerDetails(dbp.Type, dbp.Details)
-	if err != nil {
-		return nil, err
-	}
-
-	prov := &linkedca.Provisioner{
-		Id:           dbp.ID,
-		AuthorityId:  dbp.AuthorityID,
-		Type:         dbp.Type,
-		Name:         dbp.Name,
-		Claims:       dbp.Claims,
-		Details:      details,
-		X509Template: dbp.X509Template,
-		SshTemplate:  dbp.SSHTemplate,
-		CreatedAt:    timestamppb.New(dbp.CreatedAt),
-		DeletedAt:    timestamppb.New(dbp.DeletedAt),
-	}
-	return prov, nil
+	return dbp.convert2linkedca()
 }
 
 // GetProvisioner retrieves and unmarshals a provisioner from the database.
@@ -143,7 +146,7 @@ func (db *DB) CreateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 	var err error
 	prov.Id, err = randID()
 	if err != nil {
-		return errors.Wrap(err, "error generating random id for provisioner")
+		return admin.WrapErrorISE(err, "error generating random id for provisioner")
 	}
 
 	details, err := json.Marshal(prov.Details.GetData())
