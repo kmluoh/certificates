@@ -1065,6 +1065,7 @@ func TestDB_UpdateProvisioner(t *testing.T) {
 			dbp := defaultDBP(t)
 
 			prov, err := dbp.convert2linkedca()
+			assert.FatalError(t, err)
 
 			data, err := json.Marshal(dbp)
 			assert.FatalError(t, err)
@@ -1111,6 +1112,8 @@ func TestDB_UpdateProvisioner(t *testing.T) {
 			dbp := defaultDBP(t)
 
 			prov, err := dbp.convert2linkedca()
+			assert.FatalError(t, err)
+
 			prov.Name = "new-name"
 			prov.Claims = &linkedca.Claims{
 				DisableRenewal: true,
