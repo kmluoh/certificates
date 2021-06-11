@@ -14,6 +14,7 @@ import (
 	"github.com/smallstep/nosql/database"
 	nosqldb "github.com/smallstep/nosql/database"
 	"go.step.sm/linkedca"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestDB_getDBAdminBytes(t *testing.T) {
@@ -382,6 +383,8 @@ func TestDB_unmarshalAdmin(t *testing.T) {
 					assert.Equals(t, adm.ProvisionerId, tc.dba.ProvisionerID)
 					assert.Equals(t, adm.Subject, tc.dba.Subject)
 					assert.Equals(t, adm.Type, tc.dba.Type)
+					assert.Equals(t, adm.CreatedAt, timestamppb.New(tc.dba.CreatedAt))
+					assert.Equals(t, adm.DeletedAt, timestamppb.New(tc.dba.DeletedAt))
 				}
 			}
 		})
@@ -536,6 +539,8 @@ func TestDB_GetAdmin(t *testing.T) {
 					assert.Equals(t, adm.ProvisionerId, tc.dba.ProvisionerID)
 					assert.Equals(t, adm.Subject, tc.dba.Subject)
 					assert.Equals(t, adm.Type, tc.dba.Type)
+					assert.Equals(t, adm.CreatedAt, timestamppb.New(tc.dba.CreatedAt))
+					assert.Equals(t, adm.DeletedAt, timestamppb.New(tc.dba.DeletedAt))
 				}
 			}
 		})
@@ -1063,12 +1068,16 @@ func TestDB_GetAdmins(t *testing.T) {
 					assert.Equals(t, admins[0].ProvisionerId, fooAdmin.ProvisionerID)
 					assert.Equals(t, admins[0].Subject, fooAdmin.Subject)
 					assert.Equals(t, admins[0].Type, fooAdmin.Type)
+					assert.Equals(t, admins[0].CreatedAt, timestamppb.New(fooAdmin.CreatedAt))
+					assert.Equals(t, admins[0].DeletedAt, timestamppb.New(fooAdmin.DeletedAt))
 
 					assert.Equals(t, admins[1].Id, zapAdmin.ID)
 					assert.Equals(t, admins[1].AuthorityId, zapAdmin.AuthorityID)
 					assert.Equals(t, admins[1].ProvisionerId, zapAdmin.ProvisionerID)
 					assert.Equals(t, admins[1].Subject, zapAdmin.Subject)
 					assert.Equals(t, admins[1].Type, zapAdmin.Type)
+					assert.Equals(t, admins[1].CreatedAt, timestamppb.New(zapAdmin.CreatedAt))
+					assert.Equals(t, admins[1].DeletedAt, timestamppb.New(zapAdmin.DeletedAt))
 				}
 			}
 		})

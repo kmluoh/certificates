@@ -9,6 +9,7 @@ import (
 	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/nosql"
 	"go.step.sm/linkedca"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // dbAdmin is the database representation of the Admin type.
@@ -29,6 +30,8 @@ func (dba *dbAdmin) convert() *linkedca.Admin {
 		ProvisionerId: dba.ProvisionerID,
 		Subject:       dba.Subject,
 		Type:          dba.Type,
+		CreatedAt:     timestamppb.New(dba.CreatedAt),
+		DeletedAt:     timestamppb.New(dba.DeletedAt),
 	}
 }
 

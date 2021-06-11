@@ -302,9 +302,7 @@ func TestDB_unmarshalDBProvisioner(t *testing.T) {
 					assert.Equals(t, dbp.Details, tc.dbp.Details)
 					assert.Equals(t, dbp.Claims, tc.dbp.Claims)
 					assert.Equals(t, dbp.X509Template, tc.dbp.X509Template)
-					assert.Equals(t, dbp.X509TemplateData, tc.dbp.X509TemplateData)
 					assert.Equals(t, dbp.SSHTemplate, tc.dbp.SSHTemplate)
-					assert.Equals(t, dbp.SSHTemplateData, tc.dbp.SSHTemplateData)
 					assert.Equals(t, dbp.CreatedAt, tc.dbp.CreatedAt)
 					assert.Fatal(t, dbp.DeletedAt.IsZero())
 				}
@@ -352,11 +350,15 @@ func defaultDBP(t *testing.T) *dbProvisioner {
 				},
 			},
 		},
-		X509Template:     []byte("foo"),
-		X509TemplateData: []byte("bar"),
-		SSHTemplate:      []byte("baz"),
-		SSHTemplateData:  []byte("zap"),
-		CreatedAt:        clock.Now(),
+		X509Template: &linkedca.Template{
+			Template: []byte("foo"),
+			Data:     []byte("bar"),
+		},
+		SSHTemplate: &linkedca.Template{
+			Template: []byte("baz"),
+			Data:     []byte("zap"),
+		},
+		CreatedAt: clock.Now(),
 	}
 }
 
@@ -423,9 +425,7 @@ func TestDB_unmarshalProvisioner(t *testing.T) {
 					assert.Equals(t, prov.Name, tc.dbp.Name)
 					assert.Equals(t, prov.Claims, tc.dbp.Claims)
 					assert.Equals(t, prov.X509Template, tc.dbp.X509Template)
-					assert.Equals(t, prov.X509TemplateData, tc.dbp.X509TemplateData)
 					assert.Equals(t, prov.SshTemplate, tc.dbp.SSHTemplate)
-					assert.Equals(t, prov.SshTemplateData, tc.dbp.SSHTemplateData)
 
 					retDetailsBytes, err := json.Marshal(prov.Details.GetData())
 					assert.FatalError(t, err)
@@ -565,9 +565,7 @@ func TestDB_GetProvisioner(t *testing.T) {
 					assert.Equals(t, prov.Name, tc.dbp.Name)
 					assert.Equals(t, prov.Claims, tc.dbp.Claims)
 					assert.Equals(t, prov.X509Template, tc.dbp.X509Template)
-					assert.Equals(t, prov.X509TemplateData, tc.dbp.X509TemplateData)
 					assert.Equals(t, prov.SshTemplate, tc.dbp.SSHTemplate)
-					assert.Equals(t, prov.SshTemplateData, tc.dbp.SSHTemplateData)
 
 					retDetailsBytes, err := json.Marshal(prov.Details.GetData())
 					assert.FatalError(t, err)
@@ -638,9 +636,7 @@ func TestDB_DeleteProvisioner(t *testing.T) {
 						assert.Equals(t, _dbp.Name, dbp.Name)
 						assert.Equals(t, _dbp.Claims, dbp.Claims)
 						assert.Equals(t, _dbp.X509Template, dbp.X509Template)
-						assert.Equals(t, _dbp.X509TemplateData, dbp.X509TemplateData)
 						assert.Equals(t, _dbp.SSHTemplate, dbp.SSHTemplate)
-						assert.Equals(t, _dbp.SSHTemplateData, dbp.SSHTemplateData)
 						assert.Equals(t, _dbp.CreatedAt, dbp.CreatedAt)
 						assert.Equals(t, _dbp.Details, dbp.Details)
 
@@ -679,9 +675,7 @@ func TestDB_DeleteProvisioner(t *testing.T) {
 						assert.Equals(t, _dbp.Name, dbp.Name)
 						assert.Equals(t, _dbp.Claims, dbp.Claims)
 						assert.Equals(t, _dbp.X509Template, dbp.X509Template)
-						assert.Equals(t, _dbp.X509TemplateData, dbp.X509TemplateData)
 						assert.Equals(t, _dbp.SSHTemplate, dbp.SSHTemplate)
-						assert.Equals(t, _dbp.SSHTemplateData, dbp.SSHTemplateData)
 						assert.Equals(t, _dbp.CreatedAt, dbp.CreatedAt)
 						assert.Equals(t, _dbp.Details, dbp.Details)
 

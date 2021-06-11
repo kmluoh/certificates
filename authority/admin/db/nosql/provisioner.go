@@ -9,6 +9,7 @@ import (
 	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/nosql"
 	"go.step.sm/linkedca"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // dbProvisioner is the database representation of a Provisioner type.
@@ -87,6 +88,8 @@ func (db *DB) unmarshalProvisioner(data []byte, id string) (*linkedca.Provisione
 		Details:      details,
 		X509Template: dbp.X509Template,
 		SshTemplate:  dbp.SSHTemplate,
+		CreatedAt:    timestamppb.New(dbp.CreatedAt),
+		DeletedAt:    timestamppb.New(dbp.DeletedAt),
 	}
 	return prov, nil
 }
