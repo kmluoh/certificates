@@ -990,6 +990,7 @@ func TestDB_GetAdmins(t *testing.T) {
 		db       nosql.DB
 		err      error
 		adminErr *admin.Error
+		verify   func(*testing.T, []*linkedca.Admin)
 	}
 	var tests = map[string]func(t *testing.T) test{
 		"fail/db.List-error": func(t *testing.T) test {
@@ -1021,6 +1022,39 @@ func TestDB_GetAdmins(t *testing.T) {
 				err: errors.New("error unmarshaling admin zap into dbAdmin"),
 			}
 		},
+		"ok/none": func(t *testing.T) test {
+			ret := []*database.Entry{}
+			return test{
+				db: &db.MockNoSQLDB{
+					MList: func(bucket []byte) ([]*database.Entry, error) {
+						assert.Equals(t, bucket, adminsTable)
+
+						return ret, nil
+					},
+				},
+				verify: func(t *testing.T, admins []*linkedca.Admin) {
+					assert.Equals(t, len(admins), 0)
+				},
+			}
+		},
+		"ok/only-invalid": func(t *testing.T) test {
+			ret := []*database.Entry{
+				{Bucket: adminsTable, Key: []byte("bar"), Value: barb},
+				{Bucket: adminsTable, Key: []byte("baz"), Value: bazb},
+			}
+			return test{
+				db: &db.MockNoSQLDB{
+					MList: func(bucket []byte) ([]*database.Entry, error) {
+						assert.Equals(t, bucket, adminsTable)
+
+						return ret, nil
+					},
+				},
+				verify: func(t *testing.T, admins []*linkedca.Admin) {
+					assert.Equals(t, len(admins), 0)
+				},
+			}
+		},
 		"ok": func(t *testing.T) test {
 			ret := []*database.Entry{
 				{Bucket: adminsTable, Key: []byte("foo"), Value: foob},
@@ -1035,6 +1069,25 @@ func TestDB_GetAdmins(t *testing.T) {
 
 						return ret, nil
 					},
+				},
+				verify: func(t *testing.T, admins []*linkedca.Admin) {
+					assert.Equals(t, len(admins), 2)
+
+					assert.Equals(t, admins[0].Id, fooAdmin.ID)
+					assert.Equals(t, admins[0].AuthorityId, fooAdmin.AuthorityID)
+					assert.Equals(t, admins[0].ProvisionerId, fooAdmin.ProvisionerID)
+					assert.Equals(t, admins[0].Subject, fooAdmin.Subject)
+					assert.Equals(t, admins[0].Type, fooAdmin.Type)
+					assert.Equals(t, admins[0].CreatedAt, timestamppb.New(fooAdmin.CreatedAt))
+					assert.Equals(t, admins[0].DeletedAt, timestamppb.New(fooAdmin.DeletedAt))
+
+					assert.Equals(t, admins[1].Id, zapAdmin.ID)
+					assert.Equals(t, admins[1].AuthorityId, zapAdmin.AuthorityID)
+					assert.Equals(t, admins[1].ProvisionerId, zapAdmin.ProvisionerID)
+					assert.Equals(t, admins[1].Subject, zapAdmin.Subject)
+					assert.Equals(t, admins[1].Type, zapAdmin.Type)
+					assert.Equals(t, admins[1].CreatedAt, timestamppb.New(zapAdmin.CreatedAt))
+					assert.Equals(t, admins[1].DeletedAt, timestamppb.New(zapAdmin.DeletedAt))
 				},
 			}
 		},
@@ -1060,23 +1113,7 @@ func TestDB_GetAdmins(t *testing.T) {
 				}
 			} else {
 				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
-					assert.Equals(t, len(admins), 2)
-
-					assert.Equals(t, admins[0].Id, fooAdmin.ID)
-					assert.Equals(t, admins[0].AuthorityId, fooAdmin.AuthorityID)
-					assert.Equals(t, admins[0].ProvisionerId, fooAdmin.ProvisionerID)
-					assert.Equals(t, admins[0].Subject, fooAdmin.Subject)
-					assert.Equals(t, admins[0].Type, fooAdmin.Type)
-					assert.Equals(t, admins[0].CreatedAt, timestamppb.New(fooAdmin.CreatedAt))
-					assert.Equals(t, admins[0].DeletedAt, timestamppb.New(fooAdmin.DeletedAt))
-
-					assert.Equals(t, admins[1].Id, zapAdmin.ID)
-					assert.Equals(t, admins[1].AuthorityId, zapAdmin.AuthorityID)
-					assert.Equals(t, admins[1].ProvisionerId, zapAdmin.ProvisionerID)
-					assert.Equals(t, admins[1].Subject, zapAdmin.Subject)
-					assert.Equals(t, admins[1].Type, zapAdmin.Type)
-					assert.Equals(t, admins[1].CreatedAt, timestamppb.New(zapAdmin.CreatedAt))
-					assert.Equals(t, admins[1].DeletedAt, timestamppb.New(zapAdmin.DeletedAt))
+					tc.verify(t, admins)
 				}
 			}
 		})

@@ -740,7 +740,7 @@ func TestDB_GetProvisioners(t *testing.T) {
 		db       nosql.DB
 		err      error
 		adminErr *admin.Error
-		dbp      *dbProvisioner
+		verify   func(*testing.T, []*linkedca.Provisioner)
 	}
 	var tests = map[string]func(t *testing.T) test{
 		"fail/db.List-error": func(t *testing.T) test {
@@ -772,6 +772,39 @@ func TestDB_GetProvisioners(t *testing.T) {
 				err: errors.New("error unmarshaling provisioner zap into dbProvisioner"),
 			}
 		},
+		"ok/none": func(t *testing.T) test {
+			ret := []*database.Entry{}
+			return test{
+				db: &db.MockNoSQLDB{
+					MList: func(bucket []byte) ([]*database.Entry, error) {
+						assert.Equals(t, bucket, provisionersTable)
+
+						return ret, nil
+					},
+				},
+				verify: func(t *testing.T, provs []*linkedca.Provisioner) {
+					assert.Equals(t, len(provs), 0)
+				},
+			}
+		},
+		"ok/only-invalid": func(t *testing.T) test {
+			ret := []*database.Entry{
+				{Bucket: provisionersTable, Key: []byte("bar"), Value: barb},
+				{Bucket: provisionersTable, Key: []byte("baz"), Value: bazb},
+			}
+			return test{
+				db: &db.MockNoSQLDB{
+					MList: func(bucket []byte) ([]*database.Entry, error) {
+						assert.Equals(t, bucket, provisionersTable)
+
+						return ret, nil
+					},
+				},
+				verify: func(t *testing.T, provs []*linkedca.Provisioner) {
+					assert.Equals(t, len(provs), 0)
+				},
+			}
+		},
 		"ok": func(t *testing.T) test {
 			ret := []*database.Entry{
 				{Bucket: provisionersTable, Key: []byte("foo"), Value: foob},
@@ -787,30 +820,7 @@ func TestDB_GetProvisioners(t *testing.T) {
 						return ret, nil
 					},
 				},
-			}
-		},
-	}
-	for name, run := range tests {
-		tc := run(t)
-		t.Run(name, func(t *testing.T) {
-			db := DB{db: tc.db, authorityID: admin.DefaultAuthorityID}
-			if provs, err := db.GetProvisioners(context.Background()); err != nil {
-				switch k := err.(type) {
-				case *admin.Error:
-					if assert.NotNil(t, tc.adminErr) {
-						assert.Equals(t, k.Type, tc.adminErr.Type)
-						assert.Equals(t, k.Detail, tc.adminErr.Detail)
-						assert.Equals(t, k.Status, tc.adminErr.Status)
-						assert.Equals(t, k.Err.Error(), tc.adminErr.Err.Error())
-						assert.Equals(t, k.Detail, tc.adminErr.Detail)
-					}
-				default:
-					if assert.NotNil(t, tc.err) {
-						assert.HasPrefix(t, err.Error(), tc.err.Error())
-					}
-				}
-			} else {
-				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
+				verify: func(t *testing.T, provs []*linkedca.Provisioner) {
 					assert.Equals(t, len(provs), 2)
 
 					assert.Equals(t, provs[0].Id, fooProv.ID)
@@ -836,6 +846,32 @@ func TestDB_GetProvisioners(t *testing.T) {
 					retDetailsBytes, err = json.Marshal(provs[1].Details.GetData())
 					assert.FatalError(t, err)
 					assert.Equals(t, retDetailsBytes, zapProv.Details)
+				},
+			}
+		},
+	}
+	for name, run := range tests {
+		tc := run(t)
+		t.Run(name, func(t *testing.T) {
+			db := DB{db: tc.db, authorityID: admin.DefaultAuthorityID}
+			if provs, err := db.GetProvisioners(context.Background()); err != nil {
+				switch k := err.(type) {
+				case *admin.Error:
+					if assert.NotNil(t, tc.adminErr) {
+						assert.Equals(t, k.Type, tc.adminErr.Type)
+						assert.Equals(t, k.Detail, tc.adminErr.Detail)
+						assert.Equals(t, k.Status, tc.adminErr.Status)
+						assert.Equals(t, k.Err.Error(), tc.adminErr.Err.Error())
+						assert.Equals(t, k.Detail, tc.adminErr.Detail)
+					}
+				default:
+					if assert.NotNil(t, tc.err) {
+						assert.HasPrefix(t, err.Error(), tc.err.Error())
+					}
+				}
+			} else {
+				if assert.Nil(t, tc.err) && assert.Nil(t, tc.adminErr) {
+					tc.verify(t, provs)
 				}
 			}
 		})
