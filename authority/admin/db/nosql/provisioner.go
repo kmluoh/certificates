@@ -182,21 +182,19 @@ func (db *DB) UpdateProvisioner(ctx context.Context, prov *linkedca.Provisioner)
 
 	nu := old.clone()
 
-	nu.Type = prov.Type
+	if old.Type != prov.Type {
+		return admin.NewError(admin.ErrorBadRequestType, "cannot update provisioner type")
+	}
 	nu.Name = prov.Name
 	nu.Claims = prov.Claims
-	nu.Details, err = json.Marshal(prov.Details)
+	nu.Details, err = json.Marshal(prov.Details.GetData())
 	if err != nil {
 		return admin.WrapErrorISE(err, "error marshaling details when updating provisioner %s", prov.Name)
 	}
 	nu.X509Template = prov.X509Template
 	nu.SSHTemplate = prov.SshTemplate
 
-	if err := db.save(ctx, prov.Id, nu, old, "provisioner", provisionersTable); err != nil {
-		return admin.WrapErrorISE(err, "error updating provisioner %s", prov.Name)
-	}
-
-	return nil
+	return db.save(ctx, prov.Id, nu, old, "provisioner", provisionersTable)
 }
 
 // DeleteProvisioner saves an updated admin to the database.
