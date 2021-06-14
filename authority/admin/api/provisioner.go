@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi"
@@ -47,17 +46,17 @@ func (h *Handler) GetProvisioner(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
 	var (
-		p  provisioner.Interface
-		ok bool
+		p   provisioner.Interface
+		err error
 	)
 	if len(id) > 0 {
-		if p, ok = h.auth.GetProvisionerClxn().Load(id); !ok {
-			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id))
+		if p, err = h.auth.LoadProvisionerByID(id); err != nil {
+			api.WriteError(w, admin.WrapErrorISE(err, "error loading provisioner %s", id))
 			return
 		}
 	} else {
-		if p, ok = h.auth.GetProvisionerClxn().LoadByName(name); !ok {
-			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", name))
+		if p, err = h.auth.LoadProvisionerByName(name); err != nil {
+			api.WriteError(w, admin.WrapErrorISE(err, "error loading provisioner %s", name))
 			return
 		}
 	}
@@ -70,12 +69,12 @@ func (h *Handler) GetProvisioner(w http.ResponseWriter, r *http.Request) {
 	api.ProtoJSON(w, prov)
 }
 
-// GetProvisioners returns all provisioners associated with the authority.
+// GetProvisioners returns the given segment of  provisioners associated with the authority.
 func (h *Handler) GetProvisioners(w http.ResponseWriter, r *http.Request) {
 	cursor, limit, err := api.ParseCursor(r)
 	if err != nil {
 		api.WriteError(w, admin.WrapError(admin.ErrorBadRequestType, err,
-			"error parsing cursor / limt query params"))
+			"error parsing cursor & limit query params"))
 		return
 	}
 
@@ -92,44 +91,21 @@ func (h *Handler) GetProvisioners(w http.ResponseWriter, r *http.Request) {
 
 // CreateProvisioner creates a new prov.
 func (h *Handler) CreateProvisioner(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	var prov = new(linkedca.Provisioner)
 	if err := api.ReadProtoJSON(r.Body, prov); err != nil {
 		api.WriteError(w, err)
 		return
 	}
 
-	// TODO: validate
-	clxn := h.auth.GetProvisionerClxn()
-	if _, ok := clxn.LoadByName(prov.Name); ok {
-		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType,
-			"provisioner with name %s already exists", prov.Name))
-		return
-	}
-	certProv, err := authority.ProvisionerToCertificates(prov)
-	if err != nil {
-		api.WriteError(w, admin.WrapErrorISE(err, "error converting from linkedca provisioner"))
-		return
-	}
-	if _, ok := clxn.LoadByTokenID(certProv.GetIDForToken()); ok {
-		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType,
-			"provisioner with token-id %s already exists", certProv.GetIDForToken()))
-		return
-	}
-
 	// TODO: fix this
-	prov.Claims = admin.NewDefaultClaims()
+	prov.Claims = authority.NewDefaultClaims()
+	// TODO: validate
 
-	if err := h.db.CreateProvisioner(ctx, prov); err != nil {
-		api.WriteError(w, err)
+	if err := h.auth.StoreProvisioner(r.Context(), prov); err != nil {
+		api.WriteError(w, admin.WrapErrorISE(err, "error storing provisioner %s", prov.Name))
 		return
 	}
 	api.ProtoJSONStatus(w, prov, http.StatusCreated)
-
-	if err := h.auth.ReloadAuthConfig(ctx); err != nil {
-		fmt.Printf("err = %+v\n", err)
-	}
 }
 
 // DeleteProvisioner deletes a provisioner.
@@ -138,52 +114,27 @@ func (h *Handler) DeleteProvisioner(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
 	var (
-		p  provisioner.Interface
-		ok bool
+		p   provisioner.Interface
+		err error
 	)
 	if len(id) > 0 {
-		if p, ok = h.auth.GetProvisionerClxn().Load(id); !ok {
-			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id))
+		if p, err = h.auth.LoadProvisionerByID(id); err != nil {
+			api.WriteError(w, admin.WrapErrorISE(err, "error loading provisioner %s", id))
 			return
 		}
 	} else {
-		if p, ok = h.auth.GetProvisionerClxn().LoadByName(name); !ok {
-			api.WriteError(w, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", name))
+		if p, err = h.auth.LoadProvisionerByName(name); err != nil {
+			api.WriteError(w, admin.WrapErrorISE(err, "error loading provisioner %s", name))
 			return
 		}
 	}
 
-	// Validate
-	//  - Check that there are SUPER_ADMINs that aren't associated with this provisioner.
-	c := h.auth.GetAdminClxn()
-	if c.SuperCount() == c.SuperCountByProvisioner(p.GetName()) {
-		api.WriteError(w, admin.NewError(admin.ErrorBadRequestType,
-			"cannot remove provisioner %s because no super admins will remain", name))
+	if err := h.auth.RemoveProvisioner(r.Context(), p.GetID()); err != nil {
+		api.WriteError(w, admin.WrapErrorISE(err, "error removing provisioner %s", p.GetName()))
 		return
-	}
-
-	ctx := r.Context()
-	if err := h.db.DeleteProvisioner(ctx, p.GetID()); err != nil {
-		api.WriteError(w, admin.WrapErrorISE(err, "error deleting provisioner %s", name))
-		return
-	}
-
-	// Delete all admins associated with the provisioner.
-	admins, ok := c.LoadByProvisioner(name)
-	if ok {
-		for _, adm := range admins {
-			if err := h.db.DeleteAdmin(ctx, adm.Id); err != nil {
-				api.WriteError(w, admin.WrapErrorISE(err, "error deleting admin %s, as part of provisioner %s deletion", adm.Subject, name))
-				return
-			}
-		}
 	}
 
 	api.JSON(w, &DeleteResponse{Status: "ok"})
-
-	if err := h.auth.ReloadAuthConfig(ctx); err != nil {
-		fmt.Printf("err = %+v\n", err)
-	}
 }
 
 // UpdateProvisioner updates an existing prov.

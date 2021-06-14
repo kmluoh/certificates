@@ -1,20 +1,25 @@
 package authority
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
 
 	"github.com/smallstep/certificates/authority/admin"
+	"github.com/smallstep/certificates/authority/config"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
 	"go.step.sm/crypto/jose"
 	"go.step.sm/linkedca"
+	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 // GetEncryptedKey returns the JWE key corresponding to the given kid argument.
 func (a *Authority) GetEncryptedKey(kid string) (string, error) {
-	key, ok := a.GetProvisionerClxn().LoadEncryptedKey(kid)
+	a.adminMutex.RLock()
+	defer a.adminMutex.RUnlock()
+	key, ok := a.provisioners.LoadEncryptedKey(kid)
 	if !ok {
 		return "", errs.NotFound("encrypted key with kid %s was not found", kid)
 	}
@@ -24,27 +29,200 @@ func (a *Authority) GetEncryptedKey(kid string) (string, error) {
 // GetProvisioners returns a map listing each provisioner and the JWK Key Set
 // with their public keys.
 func (a *Authority) GetProvisioners(cursor string, limit int) (provisioner.List, string, error) {
-	provisioners, nextCursor := a.GetProvisionerClxn().Find(cursor, limit)
+	a.adminMutex.RLock()
+	defer a.adminMutex.RUnlock()
+	provisioners, nextCursor := a.provisioners.Find(cursor, limit)
 	return provisioners, nextCursor, nil
 }
 
 // LoadProvisionerByCertificate returns an interface to the provisioner that
 // provisioned the certificate.
 func (a *Authority) LoadProvisionerByCertificate(crt *x509.Certificate) (provisioner.Interface, error) {
-	p, ok := a.GetProvisionerClxn().LoadByCertificate(crt)
+	a.adminMutex.RLock()
+	defer a.adminMutex.RUnlock()
+	p, ok := a.provisioners.LoadByCertificate(crt)
 	if !ok {
-		return nil, errs.NotFound("provisioner not found")
+		return nil, admin.NewError(admin.ErrorNotFoundType, "unable to load provisioner from certificate")
 	}
 	return p, nil
 }
 
-// LoadProvisionerByName returns an interface to the provisioner with the given ID.
-func (a *Authority) LoadProvisionerByName(name string) (provisioner.Interface, error) {
-	p, ok := a.GetProvisionerClxn().LoadByName(name)
+// LoadProvisionerByToken returns an interface to the provisioner that
+// provisioned the token.
+func (a *Authority) LoadProvisionerByToken(token *jwt.JSONWebToken, claims *jwt.Claims) (provisioner.Interface, error) {
+	a.adminMutex.RLock()
+	defer a.adminMutex.RUnlock()
+	p, ok := a.provisioners.LoadByToken(token, claims)
 	if !ok {
-		return nil, errs.NotFound("provisioner %s not found", name)
+		return nil, admin.NewError(admin.ErrorNotFoundType, "unable to load provisioner from token")
 	}
 	return p, nil
+}
+
+// LoadProvisionerByID returns an interface to the provisioner with the given ID.
+func (a *Authority) LoadProvisionerByID(id string) (provisioner.Interface, error) {
+	a.adminMutex.RLock()
+	defer a.adminMutex.RUnlock()
+	p, ok := a.provisioners.Load(id)
+	if !ok {
+		return nil, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id)
+	}
+	return p, nil
+}
+
+// LoadProvisionerByName returns an interface to the provisioner with the given Name.
+func (a *Authority) LoadProvisionerByName(name string) (provisioner.Interface, error) {
+	a.adminMutex.RLock()
+	defer a.adminMutex.RUnlock()
+	p, ok := a.provisioners.LoadByName(name)
+	if !ok {
+		return nil, admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", name)
+	}
+	return p, nil
+}
+
+// StoreProvisioner stores an provisioner.Interface to the authority.
+func (a *Authority) StoreProvisioner(ctx context.Context, prov *linkedca.Provisioner) error {
+	a.adminMutex.Lock()
+	defer a.adminMutex.Unlock()
+
+	certProv, err := ProvisionerToCertificates(prov)
+	if err != nil {
+		return admin.WrapErrorISE(err,
+			"error converting to certificates provisioner from linkedca provisioner")
+	}
+
+	if err := a.provisioners.Store(certProv); err != nil {
+		return admin.WrapErrorISE(err, "error storing provisioner in authority cache")
+	}
+	// Store to database.
+	if err := a.adminDB.CreateProvisioner(ctx, prov); err != nil {
+		// TODO remove from authority collection.
+		return admin.WrapErrorISE(err, "error creating admin")
+	}
+	return nil
+}
+
+// UpdateProvisioner stores an provisioner.Interface to the authority.
+func (a *Authority) UpdateProvisioner(ctx context.Context, id string, nu *linkedca.Provisioner) error {
+	a.adminMutex.Lock()
+	defer a.adminMutex.Unlock()
+
+	certProv, err := ProvisionerToCertificates(nu)
+	if err != nil {
+		return admin.WrapErrorISE(err,
+			"error converting to certificates provisioner from linkedca provisioner")
+	}
+
+	if err := a.provisioners.Update(id, certProv); err != nil {
+		return admin.WrapErrorISE(err, "error updating provisioner %s in authority cache %s", nu.Name)
+	}
+	if err := a.adminDB.UpdateProvisioner(ctx, nu); err != nil {
+		// TODO un-update provisioner
+		return admin.WrapErrorISE(err, "error updating provisioner %s", nu.Name)
+	}
+	return nil
+}
+
+// RemoveProvisioner removes an provisioner.Interface from the authority.
+func (a *Authority) RemoveProvisioner(ctx context.Context, id string) error {
+	a.adminMutex.Lock()
+	defer a.adminMutex.Unlock()
+
+	p, ok := a.provisioners.Load(id)
+	if !ok {
+		return admin.NewError(admin.ErrorBadRequestType,
+			"provisioner %s not found", id)
+	}
+
+	provName, provID := p.GetName(), p.GetID()
+	// Validate
+	//  - Check that there will be SUPER_ADMINs that remain after we
+	//    remove this provisioner.
+	if a.admins.SuperCount() == a.admins.SuperCountByProvisioner(provName) {
+		return admin.NewError(admin.ErrorBadRequestType,
+			"cannot remove provisioner %s because no super admins will remain", provName)
+	}
+
+	// Delete all admins associated with the provisioner.
+	admins, ok := a.admins.LoadByProvisioner(provName)
+	if ok {
+		for _, adm := range admins {
+			if err := a.removeAdmin(ctx, adm.Id); err != nil {
+				return admin.WrapErrorISE(err, "error deleting admin %s, as part of provisioner %s deletion", adm.Subject, provName)
+			}
+		}
+	}
+
+	// Remove provisioner from authority caches.
+	if err := a.provisioners.Remove(provID); err != nil {
+		return admin.WrapErrorISE(err, "error removing admin from authority cache")
+	}
+	// Remove provisione from database.
+	if err := a.adminDB.DeleteProvisioner(ctx, provID); err != nil {
+		// TODO un-remove provisioner from collection
+		return admin.WrapErrorISE(err, "error deleting provisioner %s", provName)
+	}
+	return nil
+}
+
+func CreateFirstProvisioner(ctx context.Context, db admin.DB, password string) (*linkedca.Provisioner, error) {
+	jwk, jwe, err := jose.GenerateDefaultKeyPair([]byte(password))
+	if err != nil {
+		return nil, admin.WrapErrorISE(err, "error generating JWK key pair")
+	}
+
+	jwkPubBytes, err := jwk.MarshalJSON()
+	if err != nil {
+		return nil, admin.WrapErrorISE(err, "error marshaling JWK")
+	}
+	jwePrivStr, err := jwe.CompactSerialize()
+	if err != nil {
+		return nil, admin.WrapErrorISE(err, "error serializing JWE")
+	}
+
+	p := &linkedca.Provisioner{
+		Name:   "Admin JWK",
+		Type:   linkedca.Provisioner_JWK,
+		Claims: NewDefaultClaims(),
+		Details: &linkedca.ProvisionerDetails{
+			Data: &linkedca.ProvisionerDetails_JWK{
+				JWK: &linkedca.JWKProvisioner{
+					PublicKey:           jwkPubBytes,
+					EncryptedPrivateKey: []byte(jwePrivStr),
+				},
+			},
+		},
+	}
+	if err := db.CreateProvisioner(ctx, p); err != nil {
+		return nil, admin.WrapErrorISE(err, "error creating provisioner")
+	}
+	return p, nil
+}
+
+func NewDefaultClaims() *linkedca.Claims {
+	return &linkedca.Claims{
+		X509: &linkedca.X509Claims{
+			Durations: &linkedca.Durations{
+				Min:     config.GlobalProvisionerClaims.MinTLSDur.String(),
+				Max:     config.GlobalProvisionerClaims.MaxTLSDur.String(),
+				Default: config.GlobalProvisionerClaims.DefaultTLSDur.String(),
+			},
+		},
+		Ssh: &linkedca.SSHClaims{
+			UserDurations: &linkedca.Durations{
+				Min:     config.GlobalProvisionerClaims.MinUserSSHDur.String(),
+				Max:     config.GlobalProvisionerClaims.MaxUserSSHDur.String(),
+				Default: config.GlobalProvisionerClaims.DefaultUserSSHDur.String(),
+			},
+			HostDurations: &linkedca.Durations{
+				Min:     config.GlobalProvisionerClaims.MinHostSSHDur.String(),
+				Max:     config.GlobalProvisionerClaims.MaxHostSSHDur.String(),
+				Default: config.GlobalProvisionerClaims.DefaultHostSSHDur.String(),
+			},
+		},
+		DisableRenewal: config.DefaultDisableRenewal,
+	}
 }
 
 func provisionerListToCertificates(l []*linkedca.Provisioner) (provisioner.List, error) {
@@ -60,16 +238,19 @@ func provisionerListToCertificates(l []*linkedca.Provisioner) (provisioner.List,
 }
 
 func optionsToCertificates(p *linkedca.Provisioner) *provisioner.Options {
-	return &provisioner.Options{
-		X509: &provisioner.X509Options{
-			Template:     string(p.X509Template.Template),
-			TemplateData: p.X509Template.Data,
-		},
-		SSH: &provisioner.SSHOptions{
-			Template:     string(p.SshTemplate.Template),
-			TemplateData: p.SshTemplate.Data,
-		},
+	ops := &provisioner.Options{
+		X509: &provisioner.X509Options{},
+		SSH:  &provisioner.SSHOptions{},
 	}
+	if p.X509Template != nil {
+		ops.X509.Template = string(p.X509Template.Template)
+		ops.X509.TemplateData = p.X509Template.Data
+	}
+	if p.SshTemplate != nil {
+		ops.SSH.Template = string(p.SshTemplate.Template)
+		ops.SSH.TemplateData = p.SshTemplate.Data
+	}
+	return ops
 }
 
 // claimsToCertificates converts the linkedca provisioner claims type to the

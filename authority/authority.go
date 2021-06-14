@@ -137,6 +137,7 @@ func NewEmbedded(opts ...Option) (*Authority, error) {
 	return a, nil
 }
 
+/*
 // ReloadAuthConfig reloads dynamic fields of the AuthConfig.
 func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
 	provs, err := a.adminDB.GetProvisioners(ctx)
@@ -204,6 +205,7 @@ func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
 	a.admins = adminClxn
 	return nil
 }
+*/
 
 // init performs validation and initializes the fields of an Authority struct.
 func (a *Authority) init() error {
@@ -239,7 +241,7 @@ func (a *Authority) init() error {
 		}
 		if len(provs) == 0 {
 			// Create First Provisioner
-			prov, err := admin.CreateFirstProvisioner(context.Background(), a.adminDB, a.config.Password)
+			prov, err := CreateFirstProvisioner(context.Background(), a.adminDB, a.config.Password)
 			if err != nil {
 				return admin.WrapErrorISE(err, "error creating first provisioner")
 			}
@@ -529,7 +531,12 @@ func (a *Authority) init() error {
 	// Store all the admins in a collection.
 	a.admins = administrator.NewCollection(a.provisioners)
 	for _, adm := range a.config.AuthorityConfig.Admins {
-		if err := a.admins.Store(adm); err != nil {
+		p, ok := a.provisioners.Load(adm.ProvisionerId)
+		if !ok {
+			return errors.Errorf("error loading provisioner %s for admin %s on init",
+				adm.ProvisionerId, adm.Id)
+		}
+		if err := a.admins.Store(adm, p); err != nil {
 			return err
 		}
 	}
@@ -564,20 +571,6 @@ func (a *Authority) GetDatabase() db.AuthDB {
 // GetAdminDatabase returns the admin database, if one exists.
 func (a *Authority) GetAdminDatabase() admin.DB {
 	return a.adminDB
-}
-
-// GetAdminClxn returns the admin collection.
-func (a *Authority) GetAdminClxn() *administrator.Collection {
-	a.adminMutex.RLock()
-	defer a.adminMutex.RUnlock()
-	return a.admins
-}
-
-// GetProvisionerClxn returns the admin collection.
-func (a *Authority) GetProvisionerClxn() *provisioner.Collection {
-	a.adminMutex.RLock()
-	defer a.adminMutex.RUnlock()
-	return a.provisioners
 }
 
 // Shutdown safely shuts down any clients, databases, etc. held by the Authority.

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/smallstep/certificates/authority/admin"
 	"go.step.sm/crypto/jose"
 )
 
@@ -173,18 +173,21 @@ func (c *Collection) LoadEncryptedKey(keyID string) (string, bool) {
 func (c *Collection) Store(p Interface) error {
 	// Store provisioner always in byID. ID must be unique.
 	if _, loaded := c.byID.LoadOrStore(p.GetID(), p); loaded {
-		return errors.New("cannot add multiple provisioners with the same id")
+		return admin.NewError(admin.ErrorBadRequestType,
+			"cannot add multiple provisioners with the same id")
 	}
 	// Store provisioner always by name.
 	if _, loaded := c.byName.LoadOrStore(p.GetName(), p); loaded {
 		c.byID.Delete(p.GetID())
-		return errors.New("cannot add multiple provisioners with the same name")
+		return admin.NewError(admin.ErrorBadRequestType,
+			"cannot add multiple provisioners with the same name")
 	}
 	// Store provisioner always by ID presented in token.
 	if _, loaded := c.byTokenID.LoadOrStore(p.GetIDForToken(), p); loaded {
 		c.byID.Delete(p.GetID())
 		c.byName.Delete(p.GetName())
-		return errors.New("cannot add multiple provisioners with the same token identifier")
+		return admin.NewError(admin.ErrorBadRequestType,
+			"cannot add multiple provisioners with the same token identifier")
 	}
 
 	// Store provisioner in byKey if EncryptedKey is defined.
@@ -205,6 +208,62 @@ func (c *Collection) Store(p Interface) error {
 		uid:         hex.EncodeToString(sum),
 	})
 	sort.Sort(c.sorted)
+	return nil
+}
+
+// Remove deletes an provisioner from all associated collections and lists.
+func (c *Collection) Remove(id string) error {
+	prov, ok := c.Load(id)
+	if !ok {
+		return admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id)
+	}
+
+	var found bool
+	for i, elem := range c.sorted {
+		if elem.provisioner.GetID() == id {
+			// Remove index in sorted list
+			copy(c.sorted[i:], c.sorted[i+1:])           // Shift a[i+1:] left one index.
+			c.sorted[len(c.sorted)-1] = uidProvisioner{} // Erase last element (write zero value).
+			c.sorted = c.sorted[:len(c.sorted)-1]        // Truncate slice.
+			found = true
+		}
+	}
+	if !found {
+		return admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found in sorted list", prov.GetName())
+	}
+
+	c.byID.Delete(id)
+	c.byName.Delete(prov.GetName())
+	c.byTokenID.Delete(prov.GetIDForToken())
+	if kid, _, ok := prov.GetEncryptedKey(); ok {
+		c.byKey.Delete(kid)
+	}
+
+	return nil
+}
+
+// Update updates the given admin in all related lists and collections.
+func (c *Collection) Update(id string, nu Interface) error {
+	prov, ok := c.Load(id)
+	if !ok {
+		return admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id)
+	}
+
+	name, typ := prov.GetName(), prov.GetType()
+	switch typ {
+	case TypeJWK:
+		ptr, ok := prov.(*JWK)
+		if !ok {
+			return admin.NewErrorISE("cannot cast provisioner %s to type %d ", name, typ)
+		}
+		nuptr, ok := nu.(*JWK)
+		if !ok {
+			return admin.NewErrorISE("cannot change provisioner type")
+		}
+		*ptr = *nuptr
+	default:
+		return admin.NewErrorISE("unexpected provisioner type %d", typ)
+	}
 	return nil
 }
 

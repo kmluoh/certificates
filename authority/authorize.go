@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -115,9 +116,9 @@ func (a *Authority) AuthorizeAdminToken(r *http.Request, token string) (*linkedc
 		return nil, admin.WrapError(admin.ErrorUnauthorizedType, err, "adminHandler.authorizeToken; error parsing x5c claims")
 	}
 
-	prov, ok := a.GetProvisionerClxn().LoadByCertificate(leaf)
-	if !ok {
-		return nil, admin.NewError(admin.ErrorUnauthorizedType, "adminHandler.authorizeToken; unable to load provisioner from x5c certificate")
+	prov, err := a.LoadProvisionerByCertificate(leaf)
+	if err != nil {
+		return nil, err
 	}
 
 	// Check that the token has not been used.
@@ -146,19 +147,26 @@ func (a *Authority) AuthorizeAdminToken(r *http.Request, token string) (*linkedc
 			"x5c.authorizeToken; x5c token subject cannot be empty")
 	}
 
-	var adm *linkedca.Admin
+	var (
+		ok  bool
+		adm *linkedca.Admin
+	)
 	adminFound := false
 	adminSANs := append([]string{leaf.Subject.CommonName}, leaf.DNSNames...)
 	adminSANs = append(adminSANs, leaf.EmailAddresses...)
 	for _, san := range adminSANs {
-		if adm, ok = a.GetAdminClxn().LoadBySubProv(san, claims.Issuer); ok {
+		if adm, ok = a.LoadAdminBySubProv(san, claims.Issuer); ok {
 			adminFound = true
 			break
 		}
 	}
 	if !adminFound {
+		adm, ok = a.LoadAdminBySubProv("step", "Admin JWK")
+		if !ok {
+			fmt.Println("WHAT?!")
+		}
 		return nil, admin.NewError(admin.ErrorUnauthorizedType,
-			"adminHandler.authorizeToken; unable to load admin with subject(s) %s and provisioner %s",
+			"adminHandler.authorizeToken; unable to load admin with subject(s) %s and provisioner '%s'",
 			adminSANs, claims.Issuer)
 	}
 

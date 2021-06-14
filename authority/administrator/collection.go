@@ -1,15 +1,12 @@
 package administrator
 
 import (
-	"crypto/sha1"
-	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/smallstep/certificates/authority/admin"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"go.step.sm/linkedca"
 )
@@ -20,15 +17,10 @@ const DefaultAdminLimit = 20
 // DefaultAdminMax is the maximum limit for listing provisioners.
 const DefaultAdminMax = 100
 
-type uidAdmin struct {
-	admin *linkedca.Admin
-	uid   string
-}
-
-type adminSlice []uidAdmin
+type adminSlice []*linkedca.Admin
 
 func (p adminSlice) Len() int           { return len(p) }
-func (p adminSlice) Less(i, j int) bool { return p[i].uid < p[j].uid }
+func (p adminSlice) Less(i, j int) bool { return p[i].Id < p[j].Id }
 func (p adminSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 // Collection is a memory map of admins.
@@ -88,48 +80,115 @@ func (c *Collection) LoadByProvisioner(provName string) ([]*linkedca.Admin, bool
 
 // Store adds an admin to the collection and enforces the uniqueness of
 // admin IDs and amdin subject <-> provisioner name combos.
-func (c *Collection) Store(adm *linkedca.Admin) error {
-	p, ok := c.provisioners.Load(adm.ProvisionerId)
-	if !ok {
-		return fmt.Errorf("provisioner %s not found", adm.ProvisionerId)
-	}
+func (c *Collection) Store(adm *linkedca.Admin, prov provisioner.Interface) error {
 	// Store admin always in byID. ID must be unique.
 	if _, loaded := c.byID.LoadOrStore(adm.Id, adm); loaded {
 		return errors.New("cannot add multiple admins with the same id")
 	}
 
-	provName := p.GetName()
+	provName := prov.GetName()
 	// Store admin always in bySubProv. Subject <-> ProvisionerName must be unique.
 	if _, loaded := c.bySubProv.LoadOrStore(newSubProv(adm.Subject, provName), adm); loaded {
 		c.byID.Delete(adm.Id)
 		return errors.New("cannot add multiple admins with the same subject and provisioner")
 	}
 
+	if k, ok := c.LoadBySubProv("step", "Admin JWK"); !ok {
+		fmt.Println("WHAT?!")
+	} else {
+		fmt.Printf("k = %+v\n", k)
+	}
+
+	var isSuper = (adm.Type == linkedca.Admin_SUPER_ADMIN)
 	if admins, ok := c.LoadByProvisioner(provName); ok {
 		c.byProv.Store(provName, append(admins, adm))
-		c.superCountByProvisioner[provName]++
+		if isSuper {
+			c.superCountByProvisioner[provName]++
+		}
 	} else {
 		c.byProv.Store(provName, []*linkedca.Admin{adm})
-		c.superCountByProvisioner[provName] = 1
+		if isSuper {
+			c.superCountByProvisioner[provName] = 1
+		}
 	}
-	c.superCount++
+	if isSuper {
+		c.superCount++
+	}
 
-	// Store sorted admins.
-	// Use the first 4 bytes (32bit) of the sum to insert the order
-	// Using big endian format to get the strings sorted:
-	// 0x00000000, 0x00000001, 0x00000002, ...
-	bi := make([]byte, 4)
-	_sum := sha1.Sum([]byte(adm.Id))
-	sum := _sum[:]
-	binary.BigEndian.PutUint32(bi, uint32(c.sorted.Len()))
-	sum[0], sum[1], sum[2], sum[3] = bi[0], bi[1], bi[2], bi[3]
-	c.sorted = append(c.sorted, uidAdmin{
-		admin: adm,
-		uid:   hex.EncodeToString(sum),
-	})
+	c.sorted = append(c.sorted, adm)
 	sort.Sort(c.sorted)
 
 	return nil
+}
+
+// Remove deletes an admin from all associated collections and lists.
+func (c *Collection) Remove(id string) error {
+	adm, ok := c.LoadByID(id)
+	if !ok {
+		return admin.NewError(admin.ErrorNotFoundType, "admin %s not found", id)
+	}
+	prov, ok := c.provisioners.Load(adm.ProvisionerId)
+	if !ok {
+		return admin.NewError(admin.ErrorNotFoundType,
+			"provisioner %s for admin %s not found", adm.ProvisionerId, id)
+	}
+	provName := prov.GetName()
+	adminsByProv, ok := c.LoadByProvisioner(provName)
+	if !ok {
+		return admin.NewError(admin.ErrorNotFoundType,
+			"admins not found for provisioner %s", provName)
+	}
+
+	// Find index in sorted list.
+	sortedIndex := sort.Search(c.sorted.Len(), func(i int) bool { return c.sorted[i].Id >= adm.Id })
+	if c.sorted[sortedIndex].Id != adm.Id {
+		return admin.NewError(admin.ErrorNotFoundType,
+			"admin %s not found in sorted list", adm.Id)
+	}
+
+	var found bool
+	for i, a := range adminsByProv {
+		if a.Id == adm.Id {
+			// Remove admin from list. https://stackoverflow.com/questions/37334119/how-to-delete-an-element-from-a-slice-in-golang
+			// Order does not matter.
+			adminsByProv[i] = adminsByProv[len(adminsByProv)-1]
+			c.byProv.Store(provName, adminsByProv[:len(adminsByProv)-1])
+			found = true
+		}
+	}
+	if !found {
+		return admin.NewError(admin.ErrorNotFoundType,
+			"admin %s not found in adminsByProvisioner list", adm.Id)
+	}
+
+	// Remove index in sorted list
+	copy(c.sorted[sortedIndex:], c.sorted[sortedIndex+1:]) // Shift a[i+1:] left one index.
+	c.sorted[len(c.sorted)-1] = nil                        // Erase last element (write zero value).
+	c.sorted = c.sorted[:len(c.sorted)-1]                  // Truncate slice.
+
+	c.byID.Delete(adm.Id)
+	c.bySubProv.Delete(newSubProv(adm.Subject, provName))
+
+	if adm.Type == linkedca.Admin_SUPER_ADMIN {
+		c.superCount--
+		c.superCountByProvisioner[provName]--
+	}
+	return nil
+}
+
+// Update updates the given admin in all related lists and collections.
+func (c *Collection) Update(id string, nu *linkedca.Admin) (*linkedca.Admin, error) {
+	adm, ok := c.LoadByID(id)
+	if !ok {
+		return nil, admin.NewError(admin.ErrorNotFoundType, "admin %s not found", adm.Id)
+	}
+
+	if adm.Type == nu.Type {
+		return nil, admin.NewError(admin.ErrorBadRequestType, "admin %s already has type %s", id, adm.Type)
+	}
+
+	adm.Type = nu.Type
+	return adm, nil
 }
 
 // SuperCount returns the total number of admins.
@@ -145,7 +204,7 @@ func (c *Collection) SuperCountByProvisioner(provName string) int {
 	return 0
 }
 
-// Find implements pagination on a list of sorted provisioners.
+// Find implements pagination on a list of sorted admins.
 func (c *Collection) Find(cursor string, limit int) ([]*linkedca.Admin, string) {
 	switch {
 	case limit <= 0:
@@ -155,16 +214,15 @@ func (c *Collection) Find(cursor string, limit int) ([]*linkedca.Admin, string) 
 	}
 
 	n := c.sorted.Len()
-	cursor = fmt.Sprintf("%040s", cursor)
-	i := sort.Search(n, func(i int) bool { return c.sorted[i].uid >= cursor })
+	i := sort.Search(n, func(i int) bool { return c.sorted[i].Id >= cursor })
 
 	slice := []*linkedca.Admin{}
 	for ; i < n && len(slice) < limit; i++ {
-		slice = append(slice, c.sorted[i].admin)
+		slice = append(slice, c.sorted[i])
 	}
 
 	if i < n {
-		return slice, strings.TrimLeft(c.sorted[i].uid, "0")
+		return slice, c.sorted[i].Id
 	}
 	return slice, ""
 }
