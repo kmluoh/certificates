@@ -115,11 +115,11 @@ func (a *Authority) UpdateProvisioner(ctx context.Context, id string, nu *linked
 	}
 
 	if err := a.provisioners.Update(id, certProv); err != nil {
-		return admin.WrapErrorISE(err, "error updating provisioner %s in authority cache %s", nu.Name)
+		return admin.WrapErrorISE(err, "error updating provisioner '%s' in authority cache", nu.Name)
 	}
 	if err := a.adminDB.UpdateProvisioner(ctx, nu); err != nil {
 		// TODO un-update provisioner
-		return admin.WrapErrorISE(err, "error updating provisioner %s", nu.Name)
+		return admin.WrapErrorISE(err, "error updating provisioner '%s'", nu.Name)
 	}
 	return nil
 }

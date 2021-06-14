@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -161,10 +160,6 @@ func (a *Authority) AuthorizeAdminToken(r *http.Request, token string) (*linkedc
 		}
 	}
 	if !adminFound {
-		adm, ok = a.LoadAdminBySubProv("step", "Admin JWK")
-		if !ok {
-			fmt.Println("WHAT?!")
-		}
 		return nil, admin.NewError(admin.ErrorUnauthorizedType,
 			"adminHandler.authorizeToken; unable to load admin with subject(s) %s and provisioner '%s'",
 			adminSANs, claims.Issuer)
