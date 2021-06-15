@@ -1,7 +1,6 @@
 package administrator
 
 import (
-	"fmt"
 	"sort"
 	"sync"
 
@@ -93,12 +92,6 @@ func (c *Collection) Store(adm *linkedca.Admin, prov provisioner.Interface) erro
 		return errors.New("cannot add multiple admins with the same subject and provisioner")
 	}
 
-	if k, ok := c.LoadBySubProv("step", "Admin JWK"); !ok {
-		fmt.Println("WHAT?!")
-	} else {
-		fmt.Printf("k = %+v\n", k)
-	}
-
 	var isSuper = (adm.Type == linkedca.Admin_SUPER_ADMIN)
 	if admins, ok := c.LoadByProvisioner(provName); ok {
 		c.byProv.Store(provName, append(admins, adm))
@@ -126,6 +119,9 @@ func (c *Collection) Remove(id string) error {
 	adm, ok := c.LoadByID(id)
 	if !ok {
 		return admin.NewError(admin.ErrorNotFoundType, "admin %s not found", id)
+	}
+	if adm.Type == linkedca.Admin_SUPER_ADMIN && c.SuperCount() == 1 {
+		return admin.NewError(admin.ErrorBadRequestType, "cannot remove the last super admin")
 	}
 	prov, ok := c.provisioners.Load(adm.ProvisionerId)
 	if !ok {

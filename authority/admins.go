@@ -35,13 +35,20 @@ func (a *Authority) GetAdmins(cursor string, limit int) ([]*linkedca.Admin, stri
 func (a *Authority) StoreAdmin(ctx context.Context, adm *linkedca.Admin, prov provisioner.Interface) error {
 	a.adminMutex.Lock()
 	defer a.adminMutex.Unlock()
-	if err := a.admins.Store(adm, prov); err != nil {
-		return admin.WrapErrorISE(err, "error storing admin in authority cache")
+
+	if _, ok := a.admins.LoadBySubProv(adm.Subject, prov.GetName()); ok {
+		return admin.NewError(admin.ErrorBadRequestType,
+			"admin with subject %s and provisioner %s already exists", adm.Subject, prov.GetName())
 	}
-	// Store to database.
+	// Store to database -- this will set the ID.
 	if err := a.adminDB.CreateAdmin(ctx, adm); err != nil {
-		// TODO remove from authority collection.
 		return admin.WrapErrorISE(err, "error creating admin")
+	}
+	if err := a.admins.Store(adm, prov); err != nil {
+		if err := a.reloadAdminResources(ctx); err != nil {
+			return admin.WrapErrorISE(err, "error reloading admin resources on failed admin store")
+		}
+		return admin.WrapErrorISE(err, "error storing admin in authority cache")
 	}
 	return nil
 }
@@ -55,7 +62,9 @@ func (a *Authority) UpdateAdmin(ctx context.Context, id string, nu *linkedca.Adm
 		return nil, admin.WrapErrorISE(err, "error updating cached admin %s", id)
 	}
 	if err := a.adminDB.UpdateAdmin(ctx, adm); err != nil {
-		// TODO un-update admin
+		if err := a.reloadAdminResources(ctx); err != nil {
+			return nil, admin.WrapErrorISE(err, "error reloading admin resources on failed admin update")
+		}
 		return nil, admin.WrapErrorISE(err, "error updating admin %s", id)
 	}
 	return adm, nil
@@ -75,7 +84,9 @@ func (a *Authority) removeAdmin(ctx context.Context, id string) error {
 		return admin.WrapErrorISE(err, "error removing admin %s from authority cache", id)
 	}
 	if err := a.adminDB.DeleteAdmin(ctx, id); err != nil {
-		// TODO un-remove admin
+		if err := a.reloadAdminResources(ctx); err != nil {
+			return admin.WrapErrorISE(err, "error reloading admin resources on failed admin remove")
+		}
 		return admin.WrapErrorISE(err, "error deleting admin %s", id)
 	}
 	return nil

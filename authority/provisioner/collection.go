@@ -242,7 +242,7 @@ func (c *Collection) Remove(id string) error {
 	return nil
 }
 
-// Update updates the given admin in all related lists and collections.
+// Update updates the given provisioner in all related lists and collections.
 func (c *Collection) Update(id string, nu Interface) error {
 	prov, ok := c.Load(id)
 	if !ok {

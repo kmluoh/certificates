@@ -137,9 +137,8 @@ func NewEmbedded(opts ...Option) (*Authority, error) {
 	return a, nil
 }
 
-/*
-// ReloadAuthConfig reloads dynamic fields of the AuthConfig.
-func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
+// reloadAdminResources reloads admins and provisioners from the DB.
+func (a *Authority) reloadAdminResources(ctx context.Context) error {
 	provs, err := a.adminDB.GetProvisioners(ctx)
 	if err != nil {
 		return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
@@ -191,21 +190,22 @@ func (a *Authority) ReloadAuthConfig(ctx context.Context) error {
 	// Create admin collection.
 	adminClxn := administrator.NewCollection(provClxn)
 	for _, adm := range adminList {
-		if err := adminClxn.Store(adm); err != nil {
+		p, ok := provClxn.Load(adm.ProvisionerId)
+		if !ok {
+			return admin.NewErrorISE("provisioner %s not found when loading admin %s",
+				adm.ProvisionerId, adm.Id)
+		}
+		if err := adminClxn.Store(adm, p); err != nil {
 			return err
 		}
 	}
 
-	// Make changes to the AuthConfig under mutex.
-	a.adminMutex.Lock()
-	defer a.adminMutex.Unlock()
 	a.config.AuthorityConfig.Provisioners = provList
 	a.provisioners = provClxn
 	a.config.AuthorityConfig.Admins = adminList
 	a.admins = adminClxn
 	return nil
 }
-*/
 
 // init performs validation and initializes the fields of an Authority struct.
 func (a *Authority) init() error {
@@ -221,56 +221,6 @@ func (a *Authority) init() error {
 	if a.db == nil {
 		if a.db, err = db.New(a.config.DB); err != nil {
 			return err
-		}
-	}
-
-	if a.config.AuthorityConfig.EnableAdmin {
-		// Initialize step-ca Admin Database if it's not already initialized using
-		// WithAdminDB.
-		if a.adminDB == nil {
-			// Check if AuthConfig already exists
-			a.adminDB, err = adminDBNosql.New(a.db.(nosql.DB), admin.DefaultAuthorityID)
-			if err != nil {
-				return err
-			}
-		}
-
-		provs, err := a.adminDB.GetProvisioners(context.Background())
-		if err != nil {
-			return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
-		}
-		if len(provs) == 0 {
-			// Create First Provisioner
-			prov, err := CreateFirstProvisioner(context.Background(), a.adminDB, a.config.Password)
-			if err != nil {
-				return admin.WrapErrorISE(err, "error creating first provisioner")
-			}
-			certProv, err := ProvisionerToCertificates(prov)
-			if err != nil {
-				return admin.WrapErrorISE(err, "error converting provisioner to certificates type")
-			}
-			a.config.AuthorityConfig.Provisioners = []provisioner.Interface{certProv}
-
-			// Create First Admin
-			adm := &linkedca.Admin{
-				ProvisionerId: prov.Id,
-				Subject:       "step",
-				Type:          linkedca.Admin_SUPER_ADMIN,
-			}
-			if err := a.adminDB.CreateAdmin(context.Background(), adm); err != nil {
-				// TODO should we try to clean up?
-				return admin.WrapErrorISE(err, "error creating first admin")
-			}
-			a.config.AuthorityConfig.Admins = []*linkedca.Admin{adm}
-		} else {
-			a.config.AuthorityConfig.Provisioners, err = provisionerListToCertificates(provs)
-			if err != nil {
-				return admin.WrapErrorISE(err, "error converting provisioner list to certificates type")
-			}
-			a.config.AuthorityConfig.Admins, err = a.adminDB.GetAdmins(context.Background())
-			if err != nil {
-				return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
-			}
 		}
 	}
 
@@ -516,6 +466,56 @@ func (a *Authority) init() error {
 			HostKeys: sshKeys.HostKeys,
 		},
 		GetIdentityFunc: a.getIdentityFunc,
+	}
+
+	if a.config.AuthorityConfig.EnableAdmin {
+		// Initialize step-ca Admin Database if it's not already initialized using
+		// WithAdminDB.
+		if a.adminDB == nil {
+			// Check if AuthConfig already exists
+			a.adminDB, err = adminDBNosql.New(a.db.(nosql.DB), admin.DefaultAuthorityID)
+			if err != nil {
+				return err
+			}
+		}
+
+		provs, err := a.adminDB.GetProvisioners(context.Background())
+		if err != nil {
+			return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
+		}
+		if len(provs) == 0 {
+			// Create First Provisioner
+			prov, err := CreateFirstProvisioner(context.Background(), a.adminDB, a.config.Password)
+			if err != nil {
+				return admin.WrapErrorISE(err, "error creating first provisioner")
+			}
+			certProv, err := ProvisionerToCertificates(prov)
+			if err != nil {
+				return admin.WrapErrorISE(err, "error converting provisioner to certificates type")
+			}
+			a.config.AuthorityConfig.Provisioners = []provisioner.Interface{certProv}
+
+			// Create First Admin
+			adm := &linkedca.Admin{
+				ProvisionerId: prov.Id,
+				Subject:       "step",
+				Type:          linkedca.Admin_SUPER_ADMIN,
+			}
+			if err := a.adminDB.CreateAdmin(context.Background(), adm); err != nil {
+				// TODO should we try to clean up?
+				return admin.WrapErrorISE(err, "error creating first admin")
+			}
+			a.config.AuthorityConfig.Admins = []*linkedca.Admin{adm}
+		} else {
+			a.config.AuthorityConfig.Provisioners, err = provisionerListToCertificates(provs)
+			if err != nil {
+				return admin.WrapErrorISE(err, "error converting provisioner list to certificates type")
+			}
+			a.config.AuthorityConfig.Admins, err = a.adminDB.GetAdmins(context.Background())
+			if err != nil {
+				return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
+			}
+		}
 	}
 
 	// Store all the provisioners in a collection.

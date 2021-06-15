@@ -92,13 +92,25 @@ func (a *Authority) StoreProvisioner(ctx context.Context, prov *linkedca.Provisi
 			"error converting to certificates provisioner from linkedca provisioner")
 	}
 
-	if err := a.provisioners.Store(certProv); err != nil {
-		return admin.WrapErrorISE(err, "error storing provisioner in authority cache")
+	if _, ok := a.provisioners.LoadByName(prov.GetName()); ok {
+		return admin.NewError(admin.ErrorBadRequestType,
+			"provisioner with name %s already exists", prov.GetName())
 	}
-	// Store to database.
+	if _, ok := a.provisioners.LoadByTokenID(certProv.GetIDForToken()); ok {
+		return admin.NewError(admin.ErrorBadRequestType,
+			"provisioner with token ID %s already exists", certProv.GetIDForToken())
+	}
+
+	// Store to database -- this will set the ID.
 	if err := a.adminDB.CreateProvisioner(ctx, prov); err != nil {
-		// TODO remove from authority collection.
 		return admin.WrapErrorISE(err, "error creating admin")
+	}
+
+	if err := a.provisioners.Store(certProv); err != nil {
+		if err := a.reloadAdminResources(ctx); err != nil {
+			return admin.WrapErrorISE(err, "error reloading admin resources on failed provisioner store")
+		}
+		return admin.WrapErrorISE(err, "error storing provisioner in authority cache")
 	}
 	return nil
 }
@@ -118,7 +130,9 @@ func (a *Authority) UpdateProvisioner(ctx context.Context, id string, nu *linked
 		return admin.WrapErrorISE(err, "error updating provisioner '%s' in authority cache", nu.Name)
 	}
 	if err := a.adminDB.UpdateProvisioner(ctx, nu); err != nil {
-		// TODO un-update provisioner
+		if err := a.reloadAdminResources(ctx); err != nil {
+			return admin.WrapErrorISE(err, "error reloading admin resources on failed provisioner update")
+		}
 		return admin.WrapErrorISE(err, "error updating provisioner '%s'", nu.Name)
 	}
 	return nil
@@ -158,9 +172,11 @@ func (a *Authority) RemoveProvisioner(ctx context.Context, id string) error {
 	if err := a.provisioners.Remove(provID); err != nil {
 		return admin.WrapErrorISE(err, "error removing admin from authority cache")
 	}
-	// Remove provisione from database.
+	// Remove provisioner from database.
 	if err := a.adminDB.DeleteProvisioner(ctx, provID); err != nil {
-		// TODO un-remove provisioner from collection
+		if err := a.reloadAdminResources(ctx); err != nil {
+			return admin.WrapErrorISE(err, "error reloading admin resources on failed provisioner remove")
+		}
 		return admin.WrapErrorISE(err, "error deleting provisioner %s", provName)
 	}
 	return nil
