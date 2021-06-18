@@ -18,26 +18,6 @@ type GetProvisionersResponse struct {
 	NextCursor   string           `json:"nextCursor"`
 }
 
-// UpdateProvisionerRequest represents the body for a UpdateProvisioner request.
-type UpdateProvisionerRequest struct {
-	Type             string           `json:"type"`
-	Name             string           `json:"name"`
-	Claims           *linkedca.Claims `json:"claims"`
-	Details          []byte           `json:"details"`
-	X509Template     string           `json:"x509Template"`
-	X509TemplateData []byte           `json:"x509TemplateData"`
-	SSHTemplate      string           `json:"sshTemplate"`
-	SSHTemplateData  []byte           `json:"sshTemplateData"`
-}
-
-// Validate validates a update-provisioner request body.
-func (upr *UpdateProvisionerRequest) Validate(c *provisioner.Collection) error {
-	if _, ok := c.LoadByName(upr.Name); ok {
-		return admin.NewError(admin.ErrorBadRequestType, "provisioner with name %s already exists", upr.Name)
-	}
-	return nil
-}
-
 // GetProvisioner returns the requested provisioner, or an error.
 func (h *Handler) GetProvisioner(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -97,9 +77,11 @@ func (h *Handler) CreateProvisioner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: fix this
-	prov.Claims = authority.NewDefaultClaims()
-	// TODO: validate
+	// TODO: Validate inputs
+	if err := authority.ValidateClaims(prov.Claims); err != nil {
+		api.WriteError(w, err)
+		return
+	}
 
 	if err := h.auth.StoreProvisioner(r.Context(), prov); err != nil {
 		api.WriteError(w, admin.WrapErrorISE(err, "error storing provisioner %s", prov.Name))
@@ -139,34 +121,55 @@ func (h *Handler) DeleteProvisioner(w http.ResponseWriter, r *http.Request) {
 
 // UpdateProvisioner updates an existing prov.
 func (h *Handler) UpdateProvisioner(w http.ResponseWriter, r *http.Request) {
-	/*
-		ctx := r.Context()
-		id := chi.URLParam(r, "id")
+	var nu = new(linkedca.Provisioner)
+	if err := api.ReadProtoJSON(r.Body, nu); err != nil {
+		api.WriteError(w, err)
+		return
+	}
 
-		var body UpdateProvisionerRequest
-		if err := ReadJSON(r.Body, &body); err != nil {
-			api.WriteError(w, err)
-			return
-		}
-		if err := body.Validate(); err != nil {
-			api.WriteError(w, err)
-			return
-		}
-		if prov, err := h.db.GetProvisioner(ctx, id); err != nil {
-			api.WriteError(w, err)
-			return
-		}
+	name := chi.URLParam(r, "name")
+	_old, err := h.auth.LoadProvisionerByName(name)
+	if err != nil {
+		api.WriteError(w, admin.WrapErrorISE(err, "error loading provisioner from cached configuration '%s'", name))
+		return
+	}
 
-		prov.Claims = body.Claims
-		prov.Details = body.Provisioner
-		prov.X509Template = body.X509Template
-		prov.SSHTemplate = body.SSHTemplate
-		prov.Status = body.Status
+	old, err := h.db.GetProvisioner(r.Context(), _old.GetID())
+	if err != nil {
+		api.WriteError(w, admin.WrapErrorISE(err, "error loading provisioner from db '%s'", _old.GetID()))
+		return
+	}
 
-		if err := h.db.UpdateProvisioner(ctx, prov); err != nil {
-			api.WriteError(w, err)
-			return
-		}
-		api.JSON(w, prov)
-	*/
+	if nu.Id != old.Id {
+		api.WriteError(w, admin.NewErrorISE("cannot change provisioner ID"))
+		return
+	}
+	if nu.Type != old.Type {
+		api.WriteError(w, admin.NewErrorISE("cannot change provisioner type"))
+		return
+	}
+	if nu.AuthorityId != old.AuthorityId {
+		api.WriteError(w, admin.NewErrorISE("cannot change provisioner authorityID"))
+		return
+	}
+	if !nu.CreatedAt.AsTime().Equal(old.CreatedAt.AsTime()) {
+		api.WriteError(w, admin.NewErrorISE("cannot change provisioner createdAt"))
+		return
+	}
+	if !nu.DeletedAt.AsTime().Equal(old.DeletedAt.AsTime()) {
+		api.WriteError(w, admin.NewErrorISE("cannot change provisioner deletedAt"))
+		return
+	}
+
+	// TODO: Validate inputs
+	if err := authority.ValidateClaims(nu.Claims); err != nil {
+		api.WriteError(w, err)
+		return
+	}
+
+	if err := h.auth.UpdateProvisioner(r.Context(), nu); err != nil {
+		api.WriteError(w, err)
+		return
+	}
+	api.ProtoJSONStatus(w, nu, http.StatusOK)
 }

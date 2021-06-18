@@ -36,6 +36,10 @@ func (a *Authority) StoreAdmin(ctx context.Context, adm *linkedca.Admin, prov pr
 	a.adminMutex.Lock()
 	defer a.adminMutex.Unlock()
 
+	if adm.ProvisionerId != prov.GetID() {
+		return admin.NewErrorISE("admin.provisionerId does not match provisioner argument")
+	}
+
 	if _, ok := a.admins.LoadBySubProv(adm.Subject, prov.GetName()); ok {
 		return admin.NewError(admin.ErrorBadRequestType,
 			"admin with subject %s and provisioner %s already exists", adm.Subject, prov.GetName())

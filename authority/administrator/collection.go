@@ -80,6 +80,11 @@ func (c *Collection) LoadByProvisioner(provName string) ([]*linkedca.Admin, bool
 // Store adds an admin to the collection and enforces the uniqueness of
 // admin IDs and amdin subject <-> provisioner name combos.
 func (c *Collection) Store(adm *linkedca.Admin, prov provisioner.Interface) error {
+	// Input validation.
+	if adm.ProvisionerId != prov.GetID() {
+		return admin.NewErrorISE("admin.provisionerId does not match provisioner argument")
+	}
+
 	// Store admin always in byID. ID must be unique.
 	if _, loaded := c.byID.LoadOrStore(adm.Id, adm); loaded {
 		return errors.New("cannot add multiple admins with the same id")

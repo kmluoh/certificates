@@ -226,6 +226,7 @@ func (c *Collection) Remove(id string) error {
 			c.sorted[len(c.sorted)-1] = uidProvisioner{} // Erase last element (write zero value).
 			c.sorted = c.sorted[:len(c.sorted)-1]        // Truncate slice.
 			found = true
+			break
 		}
 	}
 	if !found {
@@ -243,28 +244,30 @@ func (c *Collection) Remove(id string) error {
 }
 
 // Update updates the given provisioner in all related lists and collections.
-func (c *Collection) Update(id string, nu Interface) error {
-	prov, ok := c.Load(id)
+func (c *Collection) Update(nu Interface) error {
+	old, ok := c.Load(nu.GetID())
 	if !ok {
-		return admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", id)
+		return admin.NewError(admin.ErrorNotFoundType, "provisioner %s not found", nu.GetID())
 	}
 
-	name, typ := prov.GetName(), prov.GetType()
-	switch typ {
-	case TypeJWK:
-		ptr, ok := prov.(*JWK)
-		if !ok {
-			return admin.NewErrorISE("cannot cast provisioner %s to type %d ", name, typ)
+	if old.GetName() != nu.GetName() {
+		if _, ok := c.LoadByName(nu.GetName()); ok {
+			return admin.NewError(admin.ErrorBadRequestType,
+				"provisioner with name %s already exists", nu.GetName())
 		}
-		nuptr, ok := nu.(*JWK)
-		if !ok {
-			return admin.NewErrorISE("cannot change provisioner type")
-		}
-		*ptr = *nuptr
-	default:
-		return admin.NewErrorISE("unexpected provisioner type %d", typ)
 	}
-	return nil
+	if old.GetIDForToken() != nu.GetIDForToken() {
+		if _, ok := c.LoadByTokenID(nu.GetIDForToken()); ok {
+			return admin.NewError(admin.ErrorBadRequestType,
+				"provisioner with Token ID %s already exists", nu.GetIDForToken())
+		}
+	}
+
+	if err := c.Remove(old.GetID()); err != nil {
+		return err
+	}
+
+	return c.Store(nu)
 }
 
 // Find implements pagination on a list of sorted provisioners.

@@ -139,48 +139,37 @@ func NewEmbedded(opts ...Option) (*Authority, error) {
 
 // reloadAdminResources reloads admins and provisioners from the DB.
 func (a *Authority) reloadAdminResources(ctx context.Context) error {
-	provs, err := a.adminDB.GetProvisioners(ctx)
-	if err != nil {
-		return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
-	}
-	provList, err := provisionerListToCertificates(provs)
-	if err != nil {
-		return admin.WrapErrorISE(err, "error converting provisioner list to certificates")
-	}
-	adminList, err := a.adminDB.GetAdmins(ctx)
-	if err != nil {
-		return admin.WrapErrorISE(err, "error getting admins to initialize authority")
+	var (
+		provList  provisioner.List
+		adminList []*linkedca.Admin
+	)
+	if a.config.AuthorityConfig.EnableAdmin {
+		provs, err := a.adminDB.GetProvisioners(ctx)
+		if err != nil {
+			return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
+		}
+		provList, err = provisionerListToCertificates(provs)
+		if err != nil {
+			return admin.WrapErrorISE(err, "error converting provisioner list to certificates")
+		}
+		adminList, err = a.adminDB.GetAdmins(ctx)
+		if err != nil {
+			return admin.WrapErrorISE(err, "error getting admins to initialize authority")
+		}
+	} else {
+		provList = a.config.AuthorityConfig.Provisioners
+		adminList = a.config.AuthorityConfig.Admins
 	}
 
-	// Merge global and configuration claims
-	claimer, err := provisioner.NewClaimer(a.config.AuthorityConfig.Claims, config.GlobalProvisionerClaims)
+	provisionerConfig, err := a.generateProvisionerConfig(ctx)
 	if err != nil {
-		return err
-	}
-	// TODO: should we also be combining the ssh federated roots here?
-	// If we rotate ssh roots keys, sshpop provisioner will lose ability to
-	// validate old SSH certificates, unless they are added as federated certs.
-	sshKeys, err := a.GetSSHRoots(ctx)
-	if err != nil {
-		return err
-	}
-	// Initialize provisioners
-	audiences := a.config.GetAudiences()
-	config := provisioner.Config{
-		Claims:    claimer.Claims(),
-		Audiences: audiences,
-		DB:        a.db,
-		SSHKeys: &provisioner.SSHKeys{
-			UserKeys: sshKeys.UserKeys,
-			HostKeys: sshKeys.HostKeys,
-		},
-		GetIdentityFunc: a.getIdentityFunc,
+		return admin.WrapErrorISE(err, "error generating provisioner config")
 	}
 
 	// Create provisioner collection.
-	provClxn := provisioner.NewCollection(audiences)
+	provClxn := provisioner.NewCollection(provisionerConfig.Audiences)
 	for _, p := range provList {
-		if err := p.Init(config); err != nil {
+		if err := p.Init(*provisionerConfig); err != nil {
 			return err
 		}
 		if err := provClxn.Store(p); err != nil {
@@ -399,19 +388,6 @@ func (a *Authority) init() error {
 		tmplVars.SSH.UserFederatedKeys = append(tmplVars.SSH.UserFederatedKeys, a.sshCAUserFederatedCerts[1:]...)
 	}
 
-	// Merge global and configuration claims
-	claimer, err := provisioner.NewClaimer(a.config.AuthorityConfig.Claims, config.GlobalProvisionerClaims)
-	if err != nil {
-		return err
-	}
-	// TODO: should we also be combining the ssh federated roots here?
-	// If we rotate ssh roots keys, sshpop provisioner will lose ability to
-	// validate old SSH certificates, unless they are added as federated certs.
-	sshKeys, err := a.GetSSHRoots(context.Background())
-	if err != nil {
-		return err
-	}
-
 	// Check if a KMS with decryption capability is required and available
 	if a.requiresDecrypter() {
 		if _, ok := a.keyManager.(kmsapi.Decrypter); !ok {
@@ -455,19 +431,6 @@ func (a *Authority) init() error {
 		// TODO: mimick the x509CAService GetCertificateAuthority here too?
 	}
 
-	// Initialize provisioners
-	audiences := a.config.GetAudiences()
-	config := provisioner.Config{
-		Claims:    claimer.Claims(),
-		Audiences: audiences,
-		DB:        a.db,
-		SSHKeys: &provisioner.SSHKeys{
-			UserKeys: sshKeys.UserKeys,
-			HostKeys: sshKeys.HostKeys,
-		},
-		GetIdentityFunc: a.getIdentityFunc,
-	}
-
 	if a.config.AuthorityConfig.EnableAdmin {
 		// Initialize step-ca Admin Database if it's not already initialized using
 		// WithAdminDB.
@@ -481,7 +444,7 @@ func (a *Authority) init() error {
 
 		provs, err := a.adminDB.GetProvisioners(context.Background())
 		if err != nil {
-			return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
+			return admin.WrapErrorISE(err, "error loading provisioners to initialize authority")
 		}
 		if len(provs) == 0 {
 			// Create First Provisioner
@@ -489,56 +452,21 @@ func (a *Authority) init() error {
 			if err != nil {
 				return admin.WrapErrorISE(err, "error creating first provisioner")
 			}
-			certProv, err := ProvisionerToCertificates(prov)
-			if err != nil {
-				return admin.WrapErrorISE(err, "error converting provisioner to certificates type")
-			}
-			a.config.AuthorityConfig.Provisioners = []provisioner.Interface{certProv}
 
-			// Create First Admin
-			adm := &linkedca.Admin{
+			// Create first admin
+			if err := a.adminDB.CreateAdmin(context.Background(), &linkedca.Admin{
 				ProvisionerId: prov.Id,
 				Subject:       "step",
 				Type:          linkedca.Admin_SUPER_ADMIN,
-			}
-			if err := a.adminDB.CreateAdmin(context.Background(), adm); err != nil {
-				// TODO should we try to clean up?
+			}); err != nil {
 				return admin.WrapErrorISE(err, "error creating first admin")
-			}
-			a.config.AuthorityConfig.Admins = []*linkedca.Admin{adm}
-		} else {
-			a.config.AuthorityConfig.Provisioners, err = provisionerListToCertificates(provs)
-			if err != nil {
-				return admin.WrapErrorISE(err, "error converting provisioner list to certificates type")
-			}
-			a.config.AuthorityConfig.Admins, err = a.adminDB.GetAdmins(context.Background())
-			if err != nil {
-				return admin.WrapErrorISE(err, "error getting provisioners to initialize authority")
 			}
 		}
 	}
 
-	// Store all the provisioners in a collection.
-	a.provisioners = provisioner.NewCollection(audiences)
-	for _, p := range a.config.AuthorityConfig.Provisioners {
-		if err := p.Init(config); err != nil {
-			return err
-		}
-		if err := a.provisioners.Store(p); err != nil {
-			return err
-		}
-	}
-	// Store all the admins in a collection.
-	a.admins = administrator.NewCollection(a.provisioners)
-	for _, adm := range a.config.AuthorityConfig.Admins {
-		p, ok := a.provisioners.Load(adm.ProvisionerId)
-		if !ok {
-			return errors.Errorf("error loading provisioner %s for admin %s on init",
-				adm.ProvisionerId, adm.Id)
-		}
-		if err := a.admins.Store(adm, p); err != nil {
-			return err
-		}
+	// Load Provisioners and Admins
+	if err := a.reloadAdminResources(context.Background()); err != nil {
+		return err
 	}
 
 	// Configure templates, currently only ssh templates are supported.

@@ -81,6 +81,32 @@ func (a *Authority) LoadProvisionerByName(name string) (provisioner.Interface, e
 	return p, nil
 }
 
+func (a *Authority) generateProvisionerConfig(ctx context.Context) (*provisioner.Config, error) {
+	// Merge global and configuration claims
+	claimer, err := provisioner.NewClaimer(a.config.AuthorityConfig.Claims, config.GlobalProvisionerClaims)
+	if err != nil {
+		return nil, err
+	}
+	// TODO: should we also be combining the ssh federated roots here?
+	// If we rotate ssh roots keys, sshpop provisioner will lose ability to
+	// validate old SSH certificates, unless they are added as federated certs.
+	sshKeys, err := a.GetSSHRoots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &provisioner.Config{
+		Claims:    claimer.Claims(),
+		Audiences: a.config.GetAudiences(),
+		DB:        a.db,
+		SSHKeys: &provisioner.SSHKeys{
+			UserKeys: sshKeys.UserKeys,
+			HostKeys: sshKeys.HostKeys,
+		},
+		GetIdentityFunc: a.getIdentityFunc,
+	}, nil
+
+}
+
 // StoreProvisioner stores an provisioner.Interface to the authority.
 func (a *Authority) StoreProvisioner(ctx context.Context, prov *linkedca.Provisioner) error {
 	a.adminMutex.Lock()
@@ -106,6 +132,22 @@ func (a *Authority) StoreProvisioner(ctx context.Context, prov *linkedca.Provisi
 		return admin.WrapErrorISE(err, "error creating admin")
 	}
 
+	// We need a new conversion that has the newly set ID.
+	certProv, err = ProvisionerToCertificates(prov)
+	if err != nil {
+		return admin.WrapErrorISE(err,
+			"error converting to certificates provisioner from linkedca provisioner")
+	}
+
+	provisionerConfig, err := a.generateProvisionerConfig(ctx)
+	if err != nil {
+		return admin.WrapErrorISE(err, "error generating provisioner config")
+	}
+
+	if err := certProv.Init(*provisionerConfig); err != nil {
+		return admin.WrapErrorISE(err, "error initializing provisioner %s", prov.Name)
+	}
+
 	if err := a.provisioners.Store(certProv); err != nil {
 		if err := a.reloadAdminResources(ctx); err != nil {
 			return admin.WrapErrorISE(err, "error reloading admin resources on failed provisioner store")
@@ -116,7 +158,7 @@ func (a *Authority) StoreProvisioner(ctx context.Context, prov *linkedca.Provisi
 }
 
 // UpdateProvisioner stores an provisioner.Interface to the authority.
-func (a *Authority) UpdateProvisioner(ctx context.Context, id string, nu *linkedca.Provisioner) error {
+func (a *Authority) UpdateProvisioner(ctx context.Context, nu *linkedca.Provisioner) error {
 	a.adminMutex.Lock()
 	defer a.adminMutex.Unlock()
 
@@ -126,7 +168,16 @@ func (a *Authority) UpdateProvisioner(ctx context.Context, id string, nu *linked
 			"error converting to certificates provisioner from linkedca provisioner")
 	}
 
-	if err := a.provisioners.Update(id, certProv); err != nil {
+	provisionerConfig, err := a.generateProvisionerConfig(ctx)
+	if err != nil {
+		return admin.WrapErrorISE(err, "error generating provisioner config")
+	}
+
+	if err := certProv.Init(*provisionerConfig); err != nil {
+		return admin.WrapErrorISE(err, "error initializing provisioner %s", nu.Name)
+	}
+
+	if err := a.provisioners.Update(certProv); err != nil {
 		return admin.WrapErrorISE(err, "error updating provisioner '%s' in authority cache", nu.Name)
 	}
 	if err := a.adminDB.UpdateProvisioner(ctx, nu); err != nil {
@@ -198,9 +249,8 @@ func CreateFirstProvisioner(ctx context.Context, db admin.DB, password string) (
 	}
 
 	p := &linkedca.Provisioner{
-		Name:   "Admin JWK",
-		Type:   linkedca.Provisioner_JWK,
-		Claims: NewDefaultClaims(),
+		Name: "Admin JWK",
+		Type: linkedca.Provisioner_JWK,
 		Details: &linkedca.ProvisionerDetails{
 			Data: &linkedca.ProvisionerDetails_JWK{
 				JWK: &linkedca.JWKProvisioner{
@@ -216,29 +266,74 @@ func CreateFirstProvisioner(ctx context.Context, db admin.DB, password string) (
 	return p, nil
 }
 
-func NewDefaultClaims() *linkedca.Claims {
-	return &linkedca.Claims{
-		X509: &linkedca.X509Claims{
-			Durations: &linkedca.Durations{
-				Min:     config.GlobalProvisionerClaims.MinTLSDur.String(),
-				Max:     config.GlobalProvisionerClaims.MaxTLSDur.String(),
-				Default: config.GlobalProvisionerClaims.DefaultTLSDur.String(),
-			},
-		},
-		Ssh: &linkedca.SSHClaims{
-			UserDurations: &linkedca.Durations{
-				Min:     config.GlobalProvisionerClaims.MinUserSSHDur.String(),
-				Max:     config.GlobalProvisionerClaims.MaxUserSSHDur.String(),
-				Default: config.GlobalProvisionerClaims.DefaultUserSSHDur.String(),
-			},
-			HostDurations: &linkedca.Durations{
-				Min:     config.GlobalProvisionerClaims.MinHostSSHDur.String(),
-				Max:     config.GlobalProvisionerClaims.MaxHostSSHDur.String(),
-				Default: config.GlobalProvisionerClaims.DefaultHostSSHDur.String(),
-			},
-		},
-		DisableRenewal: config.DefaultDisableRenewal,
+func ValidateClaims(c *linkedca.Claims) error {
+	if c == nil {
+		return nil
 	}
+	if c.X509 != nil {
+		if c.X509.Durations != nil {
+			if err := ValidateDurations(c.X509.Durations); err != nil {
+				return err
+			}
+		}
+	}
+	if c.Ssh != nil {
+		if c.Ssh.UserDurations != nil {
+			if err := ValidateDurations(c.Ssh.UserDurations); err != nil {
+				return err
+			}
+		}
+		if c.Ssh.HostDurations != nil {
+			if err := ValidateDurations(c.Ssh.HostDurations); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func ValidateDurations(d *linkedca.Durations) error {
+	var min, max, def *provisioner.Duration
+	if d.Min != "" {
+		min, err := provisioner.NewDuration(d.Min)
+		if err != nil {
+			return admin.WrapError(admin.ErrorBadRequestType, err, "min duration '%s' is invalid", d.Min)
+		}
+		if min.Value() < 0 {
+			return admin.WrapError(admin.ErrorBadRequestType, err, "min duration '%s' cannot be less than 0", d.Min)
+		}
+	}
+	if d.Max != "" {
+		max, err := provisioner.NewDuration(d.Max)
+		if err != nil {
+			return admin.WrapError(admin.ErrorBadRequestType, err, "max duration '%s' is invalid", d.Max)
+		}
+		if max.Value() < 0 {
+			return admin.WrapError(admin.ErrorBadRequestType, err, "max duration '%s' cannot be less than 0", d.Max)
+		}
+	}
+	if d.Default != "" {
+		def, err := provisioner.NewDuration(d.Default)
+		if err != nil {
+			return admin.WrapError(admin.ErrorBadRequestType, err, "default duration '%s' is invalid", d.Default)
+		}
+		if def.Value() < 0 {
+			return admin.WrapError(admin.ErrorBadRequestType, err, "default duration '%s' cannot be less than 0", d.Default)
+		}
+	}
+	if d.Min != "" && d.Max != "" && min.Value() > max.Value() {
+		return admin.NewError(admin.ErrorBadRequestType,
+			"min duration '%s' cannot be greater than max duration '%s'", d.Min, d.Max)
+	}
+	if d.Min != "" && d.Default != "" && min.Value() > def.Value() {
+		return admin.NewError(admin.ErrorBadRequestType,
+			"min duration '%s' cannot be greater than default duration '%s'", d.Min, d.Default)
+	}
+	if d.Default != "" && d.Max != "" && min.Value() > def.Value() {
+		return admin.NewError(admin.ErrorBadRequestType,
+			"default duration '%s' cannot be greater than max duration '%s'", d.Default, d.Max)
+	}
+	return nil
 }
 
 func provisionerListToCertificates(l []*linkedca.Provisioner) (provisioner.List, error) {
@@ -269,6 +364,28 @@ func optionsToCertificates(p *linkedca.Provisioner) *provisioner.Options {
 	return ops
 }
 
+func durationsToCertificates(d *linkedca.Durations) (min, max, def *provisioner.Duration, err error) {
+	if len(d.Min) > 0 {
+		min, err = provisioner.NewDuration(d.Min)
+		if err != nil {
+			return nil, nil, nil, admin.WrapErrorISE(err, "error parsing minimum duration '%s'", d.Min)
+		}
+	}
+	if len(d.Max) > 0 {
+		max, err = provisioner.NewDuration(d.Max)
+		if err != nil {
+			return nil, nil, nil, admin.WrapErrorISE(err, "error parsing maximum duration '%s'", d.Max)
+		}
+	}
+	if len(d.Default) > 0 {
+		def, err = provisioner.NewDuration(d.Default)
+		if err != nil {
+			return nil, nil, nil, admin.WrapErrorISE(err, "error parsing default duration '%s'", d.Default)
+		}
+	}
+	return
+}
+
 // claimsToCertificates converts the linkedca provisioner claims type to the
 // certifictes claims type.
 func claimsToCertificates(c *linkedca.Claims) (*provisioner.Claims, error) {
@@ -284,66 +401,24 @@ func claimsToCertificates(c *linkedca.Claims) (*provisioner.Claims, error) {
 
 	if xc := c.X509; xc != nil {
 		if d := xc.Durations; d != nil {
-			if len(d.Min) > 0 {
-				pc.MinTLSDur, err = provisioner.NewDuration(d.Min)
-				if err != nil {
-					return nil, admin.WrapErrorISE(err, "error parsing claims.minTLSDur: %s", d.Min)
-				}
-			}
-			if len(d.Max) > 0 {
-				pc.MaxTLSDur, err = provisioner.NewDuration(d.Max)
-				if err != nil {
-					return nil, admin.WrapErrorISE(err, "error parsing claims.maxTLSDur: %s", d.Max)
-				}
-			}
-			if len(d.Default) > 0 {
-				pc.DefaultTLSDur, err = provisioner.NewDuration(d.Default)
-				if err != nil {
-					return nil, admin.WrapErrorISE(err, "error parsing claims.defaultTLSDur: %s", d.Default)
-				}
+			pc.MinTLSDur, pc.MaxTLSDur, pc.DefaultTLSDur, err = durationsToCertificates(d)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
 	if sc := c.Ssh; sc != nil {
 		pc.EnableSSHCA = &sc.Enabled
 		if d := sc.UserDurations; d != nil {
-			if len(d.Min) > 0 {
-				pc.MinUserSSHDur, err = provisioner.NewDuration(d.Min)
-				if err != nil {
-					return nil, admin.WrapErrorISE(err, "error parsing claims.minUserSSHDur: %s", d.Min)
-				}
-			}
-			if len(d.Max) > 0 {
-				pc.MaxUserSSHDur, err = provisioner.NewDuration(d.Max)
-				if err != nil {
-					return nil, admin.WrapErrorISE(err, "error parsing claims.maxUserSSHDur: %s", d.Max)
-				}
-			}
-			if len(d.Default) > 0 {
-				pc.DefaultUserSSHDur, err = provisioner.NewDuration(d.Default)
-				if err != nil {
-					return nil, admin.WrapErrorISE(err, "error parsing claims.defaultUserSSHDur: %s", d.Default)
-				}
+			pc.MinUserSSHDur, pc.MaxUserSSHDur, pc.DefaultUserSSHDur, err = durationsToCertificates(d)
+			if err != nil {
+				return nil, err
 			}
 		}
 		if d := sc.HostDurations; d != nil {
-			if len(d.Min) > 0 {
-				pc.MinHostSSHDur, err = provisioner.NewDuration(d.Min)
-				if err != nil {
-					return nil, admin.WrapErrorISE(err, "error parsing claims.minHostSSHDur: %s", d.Min)
-				}
-			}
-			if len(d.Max) > 0 {
-				pc.MaxHostSSHDur, err = provisioner.NewDuration(d.Max)
-				if err != nil {
-					return nil, admin.WrapErrorISE(err, "error parsing claims.maxHostSSHDur: %s", d.Max)
-				}
-			}
-			if len(d.Default) > 0 {
-				pc.DefaultHostSSHDur, err = provisioner.NewDuration(d.Default)
-				if err != nil {
-					return nil, admin.WrapErrorISE(err, "error parsing claims.defaultHostSSHDur: %s", d.Default)
-				}
+			pc.MinHostSSHDur, pc.MaxHostSSHDur, pc.DefaultHostSSHDur, err = durationsToCertificates(d)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}

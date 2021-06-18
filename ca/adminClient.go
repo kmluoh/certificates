@@ -526,40 +526,36 @@ retry:
 	return nuProv, nil
 }
 
-// UpdateProvisioner performs the PUT /admin/provisioners/{id} request to the CA.
-func (c *AdminClient) UpdateProvisioner(id string, upr *adminAPI.UpdateProvisionerRequest) (*linkedca.Provisioner, error) {
+// UpdateProvisioner performs the PUT /admin/provisioners/{name} request to the CA.
+func (c *AdminClient) UpdateProvisioner(name string, prov *linkedca.Provisioner) error {
 	var retried bool
-	body, err := json.Marshal(upr)
+	body, err := protojson.Marshal(prov)
 	if err != nil {
-		return nil, errs.Wrap(http.StatusInternalServerError, err, "error marshaling request")
+		return errs.Wrap(http.StatusInternalServerError, err, "error marshaling request")
 	}
-	u := c.endpoint.ResolveReference(&url.URL{Path: path.Join(adminURLPrefix, "provisioners", id)})
+	u := c.endpoint.ResolveReference(&url.URL{Path: path.Join(adminURLPrefix, "provisioners", name)})
 	tok, err := c.generateAdminToken(u.Path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error generating admin token")
+		return errors.Wrapf(err, "error generating admin token")
 	}
 	req, err := http.NewRequest("PUT", u.String(), bytes.NewReader(body))
 	if err != nil {
-		return nil, errors.Wrapf(err, "create PUT %s request failed", u)
+		return errors.Wrapf(err, "create PUT %s request failed", u)
 	}
 	req.Header.Add("Authorization", tok)
 retry:
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "client PUT %s failed", u)
+		return errors.Wrapf(err, "client PUT %s failed", u)
 	}
 	if resp.StatusCode >= 400 {
 		if !retried && c.retryOnError(resp) {
 			retried = true
 			goto retry
 		}
-		return nil, readAdminError(resp.Body)
+		return readAdminError(resp.Body)
 	}
-	var prov = new(linkedca.Provisioner)
-	if err := readJSON(resp.Body, prov); err != nil {
-		return nil, errors.Wrapf(err, "error reading %s", u)
-	}
-	return prov, nil
+	return nil
 }
 
 func readAdminError(r io.ReadCloser) error {
