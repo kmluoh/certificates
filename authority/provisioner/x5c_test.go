@@ -79,7 +79,7 @@ func TestX5C_Init(t *testing.T) {
 			p.Claims = &Claims{DefaultTLSDur: &Duration{0}}
 			return ProvisionerValidateTest{
 				p:   p,
-				err: errors.New("claims: DefaultTLSCertDuration must be greater than 0"),
+				err: errors.New("claims: MinTLSCertDuration must be greater than 0"),
 			}
 		},
 		"ok": func(t *testing.T) ProvisionerValidateTest {

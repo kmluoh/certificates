@@ -293,9 +293,13 @@ func ValidateClaims(c *linkedca.Claims) error {
 }
 
 func ValidateDurations(d *linkedca.Durations) error {
-	var min, max, def *provisioner.Duration
+	var (
+		err           error
+		min, max, def *provisioner.Duration
+	)
+
 	if d.Min != "" {
-		min, err := provisioner.NewDuration(d.Min)
+		min, err = provisioner.NewDuration(d.Min)
 		if err != nil {
 			return admin.WrapError(admin.ErrorBadRequestType, err, "min duration '%s' is invalid", d.Min)
 		}
@@ -304,7 +308,7 @@ func ValidateDurations(d *linkedca.Durations) error {
 		}
 	}
 	if d.Max != "" {
-		max, err := provisioner.NewDuration(d.Max)
+		max, err = provisioner.NewDuration(d.Max)
 		if err != nil {
 			return admin.WrapError(admin.ErrorBadRequestType, err, "max duration '%s' is invalid", d.Max)
 		}
@@ -313,7 +317,7 @@ func ValidateDurations(d *linkedca.Durations) error {
 		}
 	}
 	if d.Default != "" {
-		def, err := provisioner.NewDuration(d.Default)
+		def, err = provisioner.NewDuration(d.Default)
 		if err != nil {
 			return admin.WrapError(admin.ErrorBadRequestType, err, "default duration '%s' is invalid", d.Default)
 		}

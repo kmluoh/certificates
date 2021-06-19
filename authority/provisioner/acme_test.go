@@ -61,7 +61,7 @@ func TestACME_Init(t *testing.T) {
 		"fail-bad-claims": func(t *testing.T) ProvisionerValidateTest {
 			return ProvisionerValidateTest{
 				p:   &ACME{Name: "foo", Type: "bar", Claims: &Claims{DefaultTLSDur: &Duration{0}}},
-				err: errors.New("claims: DefaultTLSCertDuration must be greater than 0"),
+				err: errors.New("claims: MinTLSCertDuration must be greater than 0"),
 			}
 		},
 		"ok": func(t *testing.T) ProvisionerValidateTest {
