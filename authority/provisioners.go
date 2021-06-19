@@ -543,35 +543,38 @@ func ProvisionerToCertificates(p *linkedca.Provisioner) (provisioner.Interface, 
 			Claims:                 claims,
 			Options:                options,
 		}, nil
-		// TODO add GCP, Azure, and SCEP
-		/*
-			case *ProvisionerDetails_GCP:
-				cfg := d.GCP
-				return &provisioner.GCP{
-					Type:                   p.Type.String(),
-					Name:                   p.Name,
-					ServiceAccounts:        cfg.ServiceAccounts,
-					ProjectIDs:             cfg.ProjectIds,
-					DisableCustomSANs:      cfg.DisableCustomSans,
-					DisableTrustOnFirstUse: cfg.DisableTrustOnFirstUse,
-					InstanceAge:            durationValue(cfg.InstanceAge),
-					Claims:                 claims,
-					Options:                options,
-				}, nil
-			case *ProvisionerDetails_Azure:
-				cfg := d.Azure
-				return &provisioner.Azure{
-					Type:                   p.Type.String(),
-					Name:                   p.Name,
-					TenantID:               cfg.TenantId,
-					ResourceGroups:         cfg.ResourceGroups,
-					Audience:               cfg.Audience,
-					DisableCustomSANs:      cfg.DisableCustomSans,
-					DisableTrustOnFirstUse: cfg.DisableTrustOnFirstUse,
-					Claims:                 claims,
-					Options:                options,
-				}, nil
-		*/
+	case *linkedca.ProvisionerDetails_GCP:
+		cfg := d.GCP
+		instanceAge, err := parseInstanceAge(cfg.InstanceAge)
+		if err != nil {
+			return nil, err
+		}
+		return &provisioner.GCP{
+			ID:                     p.Id,
+			Type:                   p.Type.String(),
+			Name:                   p.Name,
+			ServiceAccounts:        cfg.ServiceAccounts,
+			ProjectIDs:             cfg.ProjectIds,
+			DisableCustomSANs:      cfg.DisableCustomSans,
+			DisableTrustOnFirstUse: cfg.DisableTrustOnFirstUse,
+			InstanceAge:            instanceAge,
+			Claims:                 claims,
+			Options:                options,
+		}, nil
+	case *linkedca.ProvisionerDetails_Azure:
+		cfg := d.Azure
+		return &provisioner.Azure{
+			ID:                     p.Id,
+			Type:                   p.Type.String(),
+			Name:                   p.Name,
+			TenantID:               cfg.TenantId,
+			ResourceGroups:         cfg.ResourceGroups,
+			Audience:               cfg.Audience,
+			DisableCustomSANs:      cfg.DisableCustomSans,
+			DisableTrustOnFirstUse: cfg.DisableTrustOnFirstUse,
+			Claims:                 claims,
+			Options:                options,
+		}, nil
 	default:
 		return nil, fmt.Errorf("provisioner %s not implemented", p.Type)
 	}
