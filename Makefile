@@ -85,7 +85,7 @@ include make/docker.mk
 
 DATE    := $(shell date -u '+%Y-%m-%d %H:%M UTC')
 LDFLAGS := -ldflags='-w -X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
-GOFLAGS := CGO_ENABLED=0
+GOFLAGS :=
 
 download:
 	$Q go mod download

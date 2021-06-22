@@ -2,7 +2,7 @@ Source: step-ca
 Section: utils
 Priority: optional
 Maintainer: Smallstep Labs, Inc. <techadmin@smallstep.com>
-Build-Depends: debhelper (>= 9), git, bash-completion
+Build-Depends: debhelper (>= 9), git, bash-completion, libpcsclite-dev
 Standards-Version: 4.2.0
 Homepage: https://github.com/smallstep/certificates
 Vcs-Browser: https://github.com/smallstep/certificates.git
